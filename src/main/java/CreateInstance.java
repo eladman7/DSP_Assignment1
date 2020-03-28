@@ -1,3 +1,4 @@
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 
@@ -20,7 +21,7 @@ public class CreateInstance {
         String amiId = args[1];
  
         // snippet-start:[ec2.java2.create_instance.main]
-        Ec2Client ec2 = Ec2Client.create();
+        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
  
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
