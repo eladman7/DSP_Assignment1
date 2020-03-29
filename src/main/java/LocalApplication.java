@@ -1,17 +1,22 @@
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.Date;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class LocalApplication {
 
@@ -32,25 +37,26 @@ public class LocalApplication {
 
 
         // ---- Upload input file to s3 ----
-        
-        
+
+
         s3 = S3Client.builder().region(region).build();             // Build S3 client
         uploadInputFile(input_file, s3, bucket, inputFileKey);      // Upload input File to S3
         System.out.println("success upload input file");
 
-         // ---- Upload first message to sqs
+        // ---- Upload first message to sqs
 
 
-        String QUEUE_NAME = "localManagerQ" + new Date().getTime();
+        String LocalManagerQName = "Local_Manager_Queue_" + new Date().getTime();
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
-        createQByName(QUEUE_NAME, sqs);                             // Creat Q
-        String queueUrl = getQUrl(QUEUE_NAME, sqs);
-        putInputUrlInSqs(inputFileKey, bucket, sqs, queueUrl);      // Put inputFile Url in SQS
+        createQByName(LocalManagerQName, sqs);                             // Creat Q
+        String queueUrl = getQUrl(LocalManagerQName, sqs);
+        String fileUrl = getFileUrl(bucket, inputFileKey);
+        putMessageInSqs(sqs, queueUrl, fileUrl);
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance
-        
-        
+
+
         Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
@@ -59,11 +65,55 @@ public class LocalApplication {
         }
         else System.out.println("Ec2 manager already running.. ");
 
+        // ---- Read SQS summary message from manager
+
+        // receive messages from the queue, if empty? (maybe busy wait?)
+        ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
+                .queueUrl(queueUrl)   //which queue
+                .build();
+        List<Message> messages = sqs.receiveMessage(receiveRequest).messages();
+        String summaryMessage = " ";
+        //busy wait..
+        while (true) {
+            try {
+                messages = sqs.receiveMessage(receiveRequest).messages();
+                summaryMessage = messages.get(0).body();
+                break;
+            } catch (IndexOutOfBoundsException ex) {}
+        }
+
+        //Download summary file and create Html output
+        String summaryBucket = extractBucket(summaryMessage);
+        String summaryKey = extractKey(summaryMessage);
+        s3.getObject(GetObjectRequest.builder().bucket(summaryBucket).key(summaryKey).build(),
+                ResponseTransformer.toFile(Paths.get("summaryFile.html")));
+
+        if (terMessage.equals("terminate")) {
+            String localManagerUrl = getQUrl(LocalManagerQName, sqs);
+            putMessageInSqs(sqs, localManagerUrl, "terminate");
+        }
+
+
     }
 
+    public static String extractBucket(String body) {
+        Pattern pattern = Pattern.compile("//(.*?)/((.+?)*)");
+        Matcher matcher = pattern.matcher(body);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return " ";
+    }
 
+    public static String extractKey(String body) {
+        Pattern pattern = Pattern.compile("//(.*?)/((.+?)*)");
+        Matcher matcher = pattern.matcher(body);
+        if (matcher.find()) {
 
-
+            return matcher.group(2);
+        }
+        return " ";
+    }
 
     public static boolean isManagerRunning(Ec2Client ec2) {
             String nextToken = null;
@@ -75,7 +125,6 @@ public class LocalApplication {
                         for (Instance instance : reservation.instances()) {
                             List<Tag> tagList = instance.tags();
                             for (Tag tag : tagList) {
-                                System.out.println(instance.state().name().toString());
                                 if (tag.value().equals("manager") &&
                                         (instance.state().name().toString().equals("running") ||
                                                 instance.state().name().toString().equals("pending")))
@@ -123,15 +172,15 @@ public class LocalApplication {
         }
     }
 
-    private static void putInputUrlInSqs(String inputFileKey, String bucket, SqsClient sqs, String queueUrl) {
+    private static void putMessageInSqs(SqsClient sqs, String queueUrl, String message) {
         SendMessageRequest send_msg_request = SendMessageRequest.builder()
                 .queueUrl(queueUrl)
-                .messageBody(getFileUrl(bucket, inputFileKey))
+                .messageBody(message)
                 .delaySeconds(5)
                 .build();
         sqs.sendMessage(send_msg_request);
     }
-    
+
     private static String getQUrl(String QUEUE_NAME, SqsClient sqs) {
         GetQueueUrlRequest getQueueRequest = GetQueueUrlRequest.builder()
                 .queueName(QUEUE_NAME)
@@ -167,12 +216,9 @@ public class LocalApplication {
                 RequestBody.fromFile(input_file));
     }
 
-//    s3://bucket1585474884962/inputFile
 // TODO: 29/03/2020 check if there is another way.
     private static String getFileUrl (String bucket, String key) {
         return "s3://" + bucket + "/" + key;
     }
-
-
 
 }
