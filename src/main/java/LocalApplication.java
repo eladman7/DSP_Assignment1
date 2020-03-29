@@ -71,15 +71,15 @@ public class LocalApplication {
         ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
                 .queueUrl(queueUrl)   //which queue
                 .build();
-        List<Message> messages = sqs.receiveMessage(receiveRequest).messages();
-        String summaryMessage = " ";
+        List<Message> messages;
+        String summaryMessage;
         //busy wait..
         while (true) {
             try {
                 messages = sqs.receiveMessage(receiveRequest).messages();
                 summaryMessage = messages.get(0).body();
                 break;
-            } catch (IndexOutOfBoundsException ex) {}
+            } catch (IndexOutOfBoundsException ignored) {}
         }
 
         //Download summary file and create Html output
