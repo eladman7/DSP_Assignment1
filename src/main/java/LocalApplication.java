@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.File;
+import java.util.Date;
 import java.util.List;
 
 public class LocalApplication {
@@ -31,27 +32,32 @@ public class LocalApplication {
 
 
         // ---- Upload input file to s3 ----
-
+        
+        
         s3 = S3Client.builder().region(region).build();             // Build S3 client
-//        uploadInputFile(input_file, s3, bucket, inputFileKey);      // Upload input File to S3
-
+        uploadInputFile(input_file, s3, bucket, inputFileKey);      // Upload input File to S3
+        System.out.println("success upload input file");
 
          // ---- Upload first message to sqs
-/*      String QUEUE_NAME = "local <--> ManagerQ" + new Date().getTime();
+
+
+        String QUEUE_NAME = "localManagerQ" + new Date().getTime();
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
         createQByName(QUEUE_NAME, sqs);                             // Creat Q
         String queueUrl = getQUrl(QUEUE_NAME, sqs);
         putInputUrlInSqs(inputFileKey, bucket, sqs, queueUrl);      // Put inputFile Url in SQS
+        System.out.println("success uploading first message to sqs");
 
-        System.out.println("success uploading to sqs");
-*/
         // ---- Create Manager Instance
+        
+        
         Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
             createEc2Instance(ec2, amiId, ec2NameManager);
+            System.out.println("Success lunching manager");
         }
-        else System.out.println("ec2 manager already running.. ");
+        else System.out.println("Ec2 manager already running.. ");
 
     }
 
@@ -69,9 +75,10 @@ public class LocalApplication {
                         for (Instance instance : reservation.instances()) {
                             List<Tag> tagList = instance.tags();
                             for (Tag tag : tagList) {
-                                System.out.println(tag.key());
-                                System.out.println(tag.value());
-                                if (tag.value().equals("manager"))
+                                System.out.println(instance.state().name().toString());
+                                if (tag.value().equals("manager") &&
+                                        (instance.state().name().toString().equals("running") ||
+                                                instance.state().name().toString().equals("pending")))
                                     return true;
                             }
                         }
@@ -81,16 +88,7 @@ public class LocalApplication {
 
             return false;
         }
-
-
-    private static void printList(CreateTagsRequest tagsRequest) {
-        for (Tag tag : tagsRequest.tags()) {
-            System.out.println("key: " + tag.key());
-            System.out.println("val: " + tag.value());
-        }
-    }
-
-
+        
     private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2NameManager) {
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
@@ -116,9 +114,8 @@ public class LocalApplication {
 
         try {
             ec2.createTags(tagRequest);
-            System.out.printf(
-                    "Successfully started EC2 instance %s based on AMI %s",
-                    instanceId, amiId);
+            System.out.println(
+                    "Successfully started EC2 instance: " + instanceId + "based on AMI: " + amiId);
 
         } catch (Ec2Exception e) {
             System.err.println(e.getMessage());
@@ -134,8 +131,7 @@ public class LocalApplication {
                 .build();
         sqs.sendMessage(send_msg_request);
     }
-
-
+    
     private static String getQUrl(String QUEUE_NAME, SqsClient sqs) {
         GetQueueUrlRequest getQueueRequest = GetQueueUrlRequest.builder()
                 .queueName(QUEUE_NAME)
@@ -172,11 +168,10 @@ public class LocalApplication {
     }
 
 //    s3://bucket1585474884962/inputFile
+// TODO: 29/03/2020 check if there is another way.
     private static String getFileUrl (String bucket, String key) {
         return "s3://" + bucket + "/" + key;
     }
-
-
 
 
 
