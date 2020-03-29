@@ -2,7 +2,6 @@ import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.io.RandomAccessFile;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -22,12 +21,10 @@ public class Utils {
         PDDocument document = PDDocument.load(new File(filename));
         PDFRenderer pdfRenderer = new PDFRenderer(document);
         int pageCounter = 0;
-        for (PDPage page : document.getPages()) {
-            BufferedImage bim = pdfRenderer.renderImageWithDPI(
-                    pageCounter, 300, ImageType.RGB);
-            ImageIOUtil.writeImage(
-                    bim, filename + "-" + (pageCounter++) + ".png", 300);
-        }
+        BufferedImage bim = pdfRenderer.renderImageWithDPI(
+                pageCounter, 300, ImageType.RGB);
+        ImageIOUtil.writeImage(
+                bim, filename + "-" + (pageCounter) + ".png", 300);
         document.close();
     }
 

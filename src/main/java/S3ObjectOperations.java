@@ -97,7 +97,7 @@ public class S3ObjectOperations {
     }
  
  //get name and region, make bucket with the name bucket
-    private static void createBucket(String bucket, Region region) {
+    public static void createBucket(String bucket, Region region) {
         s3.createBucket(CreateBucketRequest
                 .builder()
                 .bucket(bucket)
@@ -110,7 +110,7 @@ public class S3ObjectOperations {
         System.out.println(bucket);
     }
  
-    private static void deleteBucket(String bucket) {
+    public static void deleteBucket(String bucket) {
         DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder().bucket(bucket).build();
         s3.deleteBucket(deleteBucketRequest);
     }
@@ -118,7 +118,7 @@ public class S3ObjectOperations {
     /**
      * Uploading an object to S3 in parts
      */
-    private static void multipartUpload(String bucketName, String key) throws IOException {
+    public static void multipartUpload(String bucketName, String key) throws IOException {
  
         int mb = 1024 * 1024;
         // First create a multipart upload and get upload id 

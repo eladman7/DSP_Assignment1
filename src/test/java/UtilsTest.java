@@ -14,9 +14,7 @@ class UtilsTest {
             System.out.println(ex.toString());
         } finally {
             File file0 = new File("/home/bar/IdeaProjects/Assignment1/src/main/resources/pdftoimage.pdf-0.png");
-            File file1 = new File("/home/bar/IdeaProjects/Assignment1/src/main/resources/pdftoimage.pdf-1.png");
             assertTrue(file0.exists());
-            assertTrue(file1.exists());
         }
     }
 
