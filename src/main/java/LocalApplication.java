@@ -13,7 +13,6 @@ import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.File;
 import java.nio.file.Paths;
-import java.util.Date;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -31,9 +30,8 @@ public class LocalApplication {
         String bucket = "bucket" + System.currentTimeMillis();
         S3Client s3;
         Region region = Region.US_EAST_1;
-        String amiId =  "ami-b66ed3de";
+        String amiId = "ami-b66ed3de";
         String ec2NameManager = "manager";
-
 
 
         // ---- Upload input file to s3 ----
@@ -45,8 +43,9 @@ public class LocalApplication {
 
         // ---- Upload first message to sqs
 
+//        String LocalManagerQName = "Local_Manager_Queue" + new Date().getTime();
 
-        String LocalManagerQName = "Local_Manager_Queue_" + new Date().getTime();
+        String LocalManagerQName = "Local_Manager_Queue";
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
         createQByName(LocalManagerQName, sqs);                             // Creat Q
         String queueUrl = getQUrl(LocalManagerQName, sqs);
@@ -62,10 +61,19 @@ public class LocalApplication {
             System.out.println("There is no manager running.. lunch manager");
             createEc2Instance(ec2, amiId, ec2NameManager);
             System.out.println("Success lunching manager");
+        } else System.out.println("Ec2 manager already running.. ");
+
+        // Some time wasting..
+        int i = 0;
+        while (i < 1000) {
+            i++;
         }
-        else System.out.println("Ec2 manager already running.. ");
+        putMessageInSqs(sqs, queueUrl, "terminate");
+
+        // STOP HERE IF YOU WANT TO TEST LOCAL <--> WORKER CONNECTION
 
         // ---- Read SQS summary message from manager
+
 
         // receive messages from the queue, if empty? (maybe busy wait?)
         ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
@@ -85,16 +93,23 @@ public class LocalApplication {
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
-        s3.getObject(GetObjectRequest.builder().bucket(summaryBucket).key(summaryKey).build(),
-                ResponseTransformer.toFile(Paths.get("summaryFile.html")));
 
-        if (terMessage.equals("terminate")) {
-            String localManagerUrl = getQUrl(LocalManagerQName, sqs);
-            putMessageInSqs(sqs, localManagerUrl, "terminate");
+        try {
+            s3.getObject(GetObjectRequest.builder().bucket(summaryBucket).key(summaryKey).build(),
+                    ResponseTransformer.toFile(Paths.get("summaryFile.html")));
+        } catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        } finally {
+
+            if (args[2].equals("terminate")) {
+                String localManagerUrl = getQUrl(LocalManagerQName, sqs);
+                putMessageInSqs(sqs, localManagerUrl, "terminate");
+            }
         }
 
-
     }
+
+
     /**
      * @param body
      * @return the bucket name from a sqs message

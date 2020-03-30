@@ -1,89 +1,84 @@
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Date;
+import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class Manager {
+public class ManagerRunner implements Runnable {
+    private String sqsMLName;
+    private int numOfMsgForWorker;
+    private String inputMessage;
 
-    public static void main(String[] args) {
-        // Currently assuming there is only one LocalApplication.
+    public ManagerRunner(String sqsMLName, int numOfMsgForWorker, String inputMessage) {
+        this.sqsMLName = sqsMLName;
+        this.numOfMsgForWorker = numOfMsgForWorker;
+        this.inputMessage = inputMessage;
+
+    }
+
+    @Override
+    public void run() {
+
+        S3Client s3;
         Region region = Region.US_EAST_1;
-        List<Message> messages;
-        String inputMessage;
-//        String sqsName = args[0];
-        String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
-//        int numOfMsgForWorker = Integer.parseInt(args[1]);
-        int numOfMsgForWorker = 1;                          // Save number of msg for each worker
+        String amiId = "ami-b66ed3de";
+        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
+        s3 = S3Client.builder().region(region).build();
         SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
-        String localManagerUrl = getQUrl(sqsName, sqsClient);
-        ReceiveMessageRequest rRLocalManager;
-        ExecutorService executor = Executors.newCachedThreadPool();
-        ThreadPoolExecutor pool = (ThreadPoolExecutor) executor;
 
 
-        //connect to the Queue
-        while (true) {
+        String inputBucket = extractBucket(inputMessage);
+        String inputKey = extractKey(inputMessage);
+        //download input file, Save under "inputFile.txt"
+        try {
+            s3.getObject(GetObjectRequest.builder().bucket(inputBucket).key(inputKey).build(),
+                    ResponseTransformer.toFile(Paths.get("inputFile.txt")));
+        } catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        } finally {
+
+
+            System.out.println("downloaded file.. ");
+            List<String> tasks = createSqsMessages("inputFile.txt");
+            int messageCount = tasks.size();
+            int numOfRunningWorkers = numOfRunningWorkers(ec2);
+            int numOfWorkers = 0;
+
+            //todo:add some lock
+            if (numOfRunningWorkers == 0) {
+                numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
+            } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
+
+
+            String tasksQUrl;
             try {
-                rRLocalManager = ReceiveMessageRequest.builder()
-                        .queueUrl(localManagerUrl)   //which queue
-                        .build();
-                break;
-            } catch (Exception ignored) {}
-        }
+                tasksQUrl = getQUrl(sqsMLName, sqsClient);
+                // Throw exception in the first try
+            } catch (Exception ex) {
+                createQByName(sqsMLName, sqsClient);
+                tasksQUrl = getQUrl(sqsMLName, sqsClient);
+            }
 
-
-        // Read message from Local
-        while (true) {
-            try {
-                messages = sqsClient.receiveMessage(rRLocalManager).messages();
-                inputMessage = messages.get(0).body();
-                if (inputMessage.equals("terminate") && messages.size() == 1) {
-                    executor.shutdown();
-                    deleteMessageFromQ(messages, sqsClient, localManagerUrl);
-                    try {
-                        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-
-                    }catch (InterruptedException ignored) {}
-                        break;
-                }
-                else {
-                    pool.execute(new ManagerRunner(String.valueOf("TasksQueue_" + new Date().getTime()), numOfMsgForWorker, inputMessage));
-                    deleteMessageFromQ(messages, sqsClient, localManagerUrl);
-                }
-            } catch (IndexOutOfBoundsException ignored) {}
-            finally {
-                putMessageInSqs(sqsClient, localManagerUrl, "Summary Message");
+            createWorkers(numOfWorkers, ec2, amiId);
+            // Delegate Tasks to workers.
+            for (String task : tasks) {
+                putMessageInSqs(sqsClient, tasksQUrl, task);
             }
         }
 
 
-
-
-
-
-
-    }
-
-    private static void deleteMessageFromQ(List<Message> messages, SqsClient sqsClient, String localManagerUrl) {
-        DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
-                .queueUrl(localManagerUrl)
-                .receiptHandle(messages.get(0).receiptHandle())
-                .build();
-        sqsClient.deleteMessage(deleteRequest);
     }
 
     /**
@@ -258,57 +253,4 @@ public class Manager {
 }
 
 
-/*        while (true) {
-            try {
-                rRLocalManager = ReceiveMessageRequest.builder()
-                        .queueUrl(localManagerUrl)   //which queue
-                        .build();
-                break;
-            } catch (Exception ex) {}
-        }
 
-
-        List<Message> messages;
-        String inputMessage;
-
-        // TODO: 29/03/2020 change to something prettier
-        //busy wait..
-        while (true) {
-            try {
-                messages = sqsClient.receiveMessage(rRLocalManager).messages();
-                inputMessage = messages.get(0).body();
-                break;
-            } catch (IndexOutOfBoundsException ignored) {}
-        }
-
-        if (inputMessage.equals("terminate")) {
-            System.out.println("waiting from all workers to finish.. ");
-            // TODO: 30/03/2020 add waits for all the worker to finish, create response and terminate.
-
-        } else {
-
-            String inputBucket = extractBucket(inputMessage);
-            String inputKey = extractKey(inputMessage);
-            s3.getObject(GetObjectRequest.builder().bucket(inputBucket).key(inputKey).build(), //download input file
-                    ResponseTransformer.toFile(Paths.get("inputFile.txt")));
-            // TODO: 29/03/2020 continue from the 4th square at the assignment page -  "The Manager"
-            List<String> tasks = createSqsMessages("inputFile.txt");
-            int messageCount = tasks.size();
-            int numOfRunningWorkers = numOfRunningWorkers(ec2);
-
-            if (numOfRunningWorkers == 0) {
-                numOfWorkers = messageCount/numOfMsgForWorker;      // Number of workers the job require.
-            } else numOfWorkers = (messageCount/numOfMsgForWorker) - numOfRunningWorkers;
-
-            createQByName("TasksQueue", sqsClient);
-            String managerWorkersUrl = getQUrl("TasksQueue", sqsClient);
-            createWorkers(numOfWorkers, ec2, amiId);
-
-            for (String task: tasks) {
-                putMessageInSqs(sqsClient, managerWorkersUrl, task);
-            }
-
-
-
-
-        }*/
