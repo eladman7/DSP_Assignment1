@@ -95,7 +95,10 @@ public class LocalApplication {
 
 
     }
-
+    /**
+     * @param body
+     * @return the bucket name from a sqs message
+     */
     public static String extractBucket(String body) {
         Pattern pattern = Pattern.compile("//(.*?)/((.+?)*)");
         Matcher matcher = pattern.matcher(body);
@@ -105,6 +108,10 @@ public class LocalApplication {
         return " ";
     }
 
+    /**
+     * @param body
+     * @return the key from a sqs message
+     */
     public static String extractKey(String body) {
         Pattern pattern = Pattern.compile("//(.*?)/((.+?)*)");
         Matcher matcher = pattern.matcher(body);
@@ -115,6 +122,10 @@ public class LocalApplication {
         return " ";
     }
 
+    /**
+     * @param ec2
+     * @return true iff the manager running
+     */
     public static boolean isManagerRunning(Ec2Client ec2) {
             String nextToken = null;
                  do {
@@ -137,8 +148,15 @@ public class LocalApplication {
 
             return false;
         }
+
+    /**
+     * create an Ec2 instance
+     * @param ec2
+     * @param amiId
+     * @param ec2Name
+     */
         
-    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2NameManager) {
+    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) {
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
@@ -153,7 +171,7 @@ public class LocalApplication {
 
         Tag tag = Tag.builder()
                 .key("name")
-                .value(ec2NameManager)
+                .value(ec2Name)
                 .build();
 
         CreateTagsRequest tagRequest = CreateTagsRequest.builder()
@@ -172,6 +190,13 @@ public class LocalApplication {
         }
     }
 
+    /**
+     * put message in sqs with the url queueUrl
+     * @param sqs
+     * @param queueUrl
+     * @param message
+     */
+
     private static void putMessageInSqs(SqsClient sqs, String queueUrl, String message) {
         SendMessageRequest send_msg_request = SendMessageRequest.builder()
                 .queueUrl(queueUrl)
@@ -180,7 +205,11 @@ public class LocalApplication {
                 .build();
         sqs.sendMessage(send_msg_request);
     }
-
+    /**
+     * @param QUEUE_NAME
+     * @param sqs
+     * @return this function return the Q url by its name.
+     */
     private static String getQUrl(String QUEUE_NAME, SqsClient sqs) {
         GetQueueUrlRequest getQueueRequest = GetQueueUrlRequest.builder()
                 .queueName(QUEUE_NAME)
@@ -188,6 +217,12 @@ public class LocalApplication {
         //get url in order to send later
         return sqs.getQueueUrl(getQueueRequest).queueUrl();
     }
+
+    /**
+     * create a sqs queue with the name QUEUE_NAME, using sqs client
+     * @param QUEUE_NAME
+     * @param sqs
+     */
 
     private static void createQByName(String QUEUE_NAME, SqsClient sqs) {
         try {
@@ -200,6 +235,14 @@ public class LocalApplication {
 
         }
     }
+
+    /**
+     * Upload first Input file to S3
+     * @param input_file
+     * @param s3
+     * @param bucket
+     * @param key
+     */
 
     private static void uploadInputFile(File input_file, S3Client s3, String bucket, String key) {
 
@@ -217,6 +260,13 @@ public class LocalApplication {
     }
 
 // TODO: 29/03/2020 check if there is another way.
+
+    /**
+     * Extract the file url from some s3 path
+     * @param bucket
+     * @param key
+     * @return
+     */
     private static String getFileUrl (String bucket, String key) {
         return "s3://" + bucket + "/" + key;
     }
