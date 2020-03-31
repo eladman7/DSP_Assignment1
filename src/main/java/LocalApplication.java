@@ -30,7 +30,7 @@ public class LocalApplication {
         String bucket = "bucket" + System.currentTimeMillis();
         S3Client s3;
         Region region = Region.US_EAST_1;
-        String amiId = "ami-b66ed3de";
+        String amiId = "ami-076515f20540e6e0b";
         String ec2NameManager = "manager";
 
 
