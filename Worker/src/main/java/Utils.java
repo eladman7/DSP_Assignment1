@@ -26,7 +26,7 @@ public class Utils {
         InputStream in = new URL(url).openStream();
         Files.copy(in, Paths.get(LOCAL_COPY_NAME + ".pdf"), StandardCopyOption.REPLACE_EXISTING);
 
-        PDDocument document = PDDocument.load(new File(LOCAL_COPY_NAME));
+        PDDocument document = PDDocument.load(new File(LOCAL_COPY_NAME + ".pdf"));
         PDFRenderer pdfRenderer = new PDFRenderer(document);
         int pageCounter = 0;
         BufferedImage bim = pdfRenderer.renderImageWithDPI(
