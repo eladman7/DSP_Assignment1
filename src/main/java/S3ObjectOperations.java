@@ -15,6 +15,7 @@ public class S3ObjectOperations {
     private static S3Client s3;
  
     public static void main(String[] args) throws IOException {
+
         Region region = Region.US_WEST_2;
         s3 = S3Client.builder().region(region).build();
  
@@ -25,7 +26,7 @@ public class S3ObjectOperations {
         createBucket(bucket, region);
  
         // Put Object into bucket under the key "key"
-        //put there : RequestBody.fromByteBuffer(getRandomByteBuffer(10_000))
+        // Put there : RequestBody.fromByteBuffer(getRandomByteBuffer(10_000))
         // - this may be a file under the key equal to the file path.
         s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key)
                         .build(),

@@ -68,12 +68,12 @@ public class LocalApplication {
         while (i < 1000) {
             i++;
         }
-        putMessageInSqs(sqs, queueUrl, "terminate");
+//        putMessageInSqs(sqs, queueUrl, "terminate");
 
         // STOP HERE IF YOU WANT TO TEST LOCAL <--> WORKER CONNECTION
 
-        // ---- Read SQS summary message from manager
 
+        // ---- Read SQS summary message from manager
 
         // receive messages from the queue, if empty? (maybe busy wait?)
         ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()

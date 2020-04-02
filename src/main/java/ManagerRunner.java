@@ -45,18 +45,14 @@ public class ManagerRunner implements Runnable {
         try {
             s3.getObject(GetObjectRequest.builder().bucket(inputBucket).key(inputKey).build(),
                     ResponseTransformer.toFile(Paths.get("inputFile.txt")));
-        } catch (Exception ex) {
-            System.out.println(ex.getMessage());
-        } finally {
+        } catch (Exception ignored) {}
+        finally {
 
-
-            System.out.println("downloaded file.. ");
             List<String> tasks = createSqsMessages("inputFile.txt");
             int messageCount = tasks.size();
             int numOfRunningWorkers = numOfRunningWorkers(ec2);
             int numOfWorkers = 0;
 
-            //todo:add some lock
             if (numOfRunningWorkers == 0) {
                 numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
             } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
@@ -159,8 +155,8 @@ public class ManagerRunner implements Runnable {
      * @param ec2
      * @return the number of currently running client
      */
-    // TODO: 30/03/2020 synchronized?
-    public static synchronized int numOfRunningWorkers(Ec2Client ec2) {
+
+    public static int numOfRunningWorkers(Ec2Client ec2) {
         String nextToken = null;
         int counter = 0;
         do {
@@ -185,7 +181,6 @@ public class ManagerRunner implements Runnable {
         return counter;
     }
 
-    // TODO: 29/03/2020 this function exists in LocalApp too.
 
     /**
      * @param QUEUE_NAME
