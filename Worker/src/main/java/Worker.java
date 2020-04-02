@@ -24,7 +24,8 @@ public class Worker {
      * upload output file to s3
      * send completed message to outputQName
      * delete handled message from inputQName
-     *  @param message
+     *
+     * @param message
      * @param outputQName
      * @param inputQName
      */
@@ -32,35 +33,29 @@ public class Worker {
         String[] operationUrlPair = message.body().split("\t");
         String operationName = operationUrlPair[0].toUpperCase();
         String pdfS3PathToProcess = operationUrlPair[1];
-        String outFilePath = processOperation(operationName, pdfS3PathToProcess);
-        String fileKey = "output";
-        String bucket = S3Utils.uploadFile(outFilePath, fileKey);
-//        https://<bucket-name>.s3.amazonaws.com/<key>   - remote output url
-        String remoteOutputURL = "https://" + bucket + ".s3.amazonaws.com/" + fileKey;
-        SQSUtils.sendMSG(outputQName, buildCompletedMessage(operationName, pdfS3PathToProcess, remoteOutputURL));
-        SQSUtils.deleteMSG(message, inputQName);
+        String outFilePath;
+        try {
+            outFilePath = processOperation(operationName, pdfS3PathToProcess);
+            String fileKey = "output";
+            String bucket = S3Utils.uploadFile(outFilePath, fileKey);
+            String remoteOutputURL = "https://" + bucket + ".s3.amazonaws.com/" + fileKey;
+            SQSUtils.sendMSG(outputQName, buildCompletedMessage(operationName, pdfS3PathToProcess, remoteOutputURL));
+        } catch (IOException e) {
+            handleFailure(e, pdfS3PathToProcess, operationName);
+        } finally {
+            SQSUtils.deleteMSG(message, inputQName);
+        }
+
     }
 
-    private static String processOperation(String operationName, String pdfS3PathToProcess) {
-        String outFilePath = "";
+    private static String processOperation(String operationName, String pdfS3PathToProcess) throws IOException {
+        String outFilePath;
         if (operationName.equals(PDFOperationType.TOIMAGE.name())) {
-            try {
-                outFilePath = Utils.convertPdfToImage(pdfS3PathToProcess);
-            } catch (IOException e) {
-                handleFailure(e);
-            }
+            outFilePath = Utils.convertPdfToImage(pdfS3PathToProcess);
         } else if (operationName.equals(PDFOperationType.TOHTML.name())) {
-            try {
-                outFilePath = Utils.convertPdfToHtml(pdfS3PathToProcess);
-            } catch (IOException e) {
-                handleFailure(e);
-            }
+            outFilePath = Utils.convertPdfToHtml(pdfS3PathToProcess);
         } else {
-            try {
-                outFilePath = Utils.convertPdfToText(pdfS3PathToProcess);
-            } catch (IOException e) {
-                handleFailure(e);
-            }
+            outFilePath = Utils.convertPdfToText(pdfS3PathToProcess);
         }
         return outFilePath;
     }
@@ -69,7 +64,12 @@ public class Worker {
         return operationName + ": " + inputFileURL + " " + remoteOutputURL;
     }
 
-    private static void handleFailure(IOException e) {
-        SQSUtils.sendMSG(WORKER_OUTPUT_QUEUE, e.getMessage());
+    private static String buildFailedMessage(IOException e, String inputFile, String opName) {
+        return opName + ": " + inputFile + " " + e.getMessage();
+    }
+
+    private static void handleFailure(IOException e, String inputFile, String opName) {
+        System.out.println("error on pdf task");
+        SQSUtils.sendMSG(WORKER_OUTPUT_QUEUE, buildFailedMessage(e, inputFile, opName));
     }
 }
