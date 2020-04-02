@@ -16,6 +16,7 @@ public class Worker {
 
     private static void handleMessage(Message message, String outputQName, String inputQName) {
         // assuming only 1 type of message
+        System.out.println("worker: got new pdf message");
         handleNewPDFTask(message, outputQName, inputQName);
     }
 
@@ -33,6 +34,8 @@ public class Worker {
         String[] operationUrlPair = message.body().split("\t");
         String operationName = operationUrlPair[0].toUpperCase();
         String pdfS3PathToProcess = operationUrlPair[1];
+        System.out.println("worker: handling message");
+        System.out.println("worker: message body - operation name: " + operationName + ", pdf url:  " + pdfS3PathToProcess);
         String outFilePath;
         try {
             outFilePath = processOperation(operationName, pdfS3PathToProcess);
@@ -40,7 +43,7 @@ public class Worker {
             String bucket = S3Utils.uploadFile(outFilePath, fileKey);
             String remoteOutputURL = "https://" + bucket + ".s3.amazonaws.com/" + fileKey;
             SQSUtils.sendMSG(outputQName, buildCompletedMessage(operationName, pdfS3PathToProcess, remoteOutputURL));
-        } catch (IOException e) {
+        } catch (Exception e) {
             handleFailure(e, pdfS3PathToProcess, operationName);
         } finally {
             SQSUtils.deleteMSG(message, inputQName);
@@ -64,11 +67,11 @@ public class Worker {
         return operationName + ": " + inputFileURL + " " + remoteOutputURL;
     }
 
-    private static String buildFailedMessage(IOException e, String inputFile, String opName) {
+    private static String buildFailedMessage(Exception e, String inputFile, String opName) {
         return opName + ": " + inputFile + " " + e.getMessage();
     }
 
-    private static void handleFailure(IOException e, String inputFile, String opName) {
+    private static void handleFailure(Exception e, String inputFile, String opName) {
         System.out.println("error on pdf task");
         SQSUtils.sendMSG(WORKER_OUTPUT_QUEUE, buildFailedMessage(e, inputFile, opName));
     }
