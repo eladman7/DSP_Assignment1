@@ -17,14 +17,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ManagerRunner implements Runnable {
-    private String sqsMLName;
+    private String TasksQName;
     private int numOfMsgForWorker;
     private String inputMessage;
+    private String workerOutputQ;
 
-    public ManagerRunner(String sqsMLName, int numOfMsgForWorker, String inputMessage) {
-        this.sqsMLName = sqsMLName;
+    public ManagerRunner(String TasksQName, String workerOutputQ, int numOfMsgForWorker, String inputMessage) {
+        this.TasksQName = TasksQName;
         this.numOfMsgForWorker = numOfMsgForWorker;
         this.inputMessage = inputMessage;
+        this.workerOutputQ = workerOutputQ;
 
     }
 
@@ -33,7 +35,7 @@ public class ManagerRunner implements Runnable {
 
         S3Client s3;
         Region region = Region.US_EAST_1;
-        String amiId = "ami-b66ed3de";
+        String amiId = "ami-076515f20540e6e0b";
         Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
         s3 = S3Client.builder().region(region).build();
         SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
@@ -59,22 +61,47 @@ public class ManagerRunner implements Runnable {
 
 
             String tasksQUrl;
-            try {
-                tasksQUrl = getQUrl(sqsMLName, sqsClient);
-                // Throw exception in the first try
-            } catch (Exception ex) {
-                createQByName(sqsMLName, sqsClient);
-                tasksQUrl = getQUrl(sqsMLName, sqsClient);
-            }
+            // Build Tasks Q name
+            tasksQUrl = BuildQueueIfNotExists(sqsClient, TasksQName);
+            System.out.println("build TasksQ succeed");
+
+
+            // Build Workers output Q
+            BuildQueueIfNotExists(sqsClient, workerOutputQ);
+            System.out.println("build Workers outputQ succeed");
+
 
             createWorkers(numOfWorkers, ec2, amiId);
+            System.out.println("create workers succeed");
+
             // Delegate Tasks to workers.
             for (String task : tasks) {
                 putMessageInSqs(sqsClient, tasksQUrl, task);
             }
+
+            System.out.println("Delegated all tasks to workers");
         }
 
 
+    }
+
+    /**
+     *
+     * @param sqsClient
+     * @param qName
+     * @return Build sqs with the name qName, if not already exists.
+     */
+
+    private String BuildQueueIfNotExists(SqsClient sqsClient, String qName) {
+        String tasksQUrl;
+        try {
+            tasksQUrl = getQUrl(qName, sqsClient);
+            // Throw exception in the first try
+        } catch (Exception ex) {
+            createQByName(qName, sqsClient);
+            tasksQUrl = getQUrl(qName, sqsClient);
+        }
+        return tasksQUrl;
     }
 
     /**
