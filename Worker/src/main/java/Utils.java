@@ -23,6 +23,7 @@ public class Utils {
     private static final String LOCAL_COPY_NAME = "local_copy";
 
     public static String convertPdfToImage(String url) throws IOException {
+        System.out.println("inside Utils.convertPdfToImage()");
         InputStream in = new URL(url).openStream();
         Files.copy(in, Paths.get(LOCAL_COPY_NAME + ".pdf"), StandardCopyOption.REPLACE_EXISTING);
 
@@ -38,6 +39,7 @@ public class Utils {
     }
 
     public static String convertPdfToText(String url) throws IOException {
+        System.out.println("inside Utils.convertPdfToText()");
         InputStream in = new URL(url).openStream();
         Files.copy(in, Paths.get(LOCAL_COPY_NAME + ".pdf"), StandardCopyOption.REPLACE_EXISTING);
 
@@ -57,6 +59,7 @@ public class Utils {
     }
 
     public static String convertPdfToHtml(String url) throws IOException {
+        System.out.println("inside Utils.convertPdfToHtml()");
         InputStream in = new URL(url).openStream();
         Files.copy(in, Paths.get(LOCAL_COPY_NAME + ".pdf"), StandardCopyOption.REPLACE_EXISTING);
 

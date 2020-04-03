@@ -4,20 +4,19 @@ import java.io.IOException;
 
 public class Worker {
 
-    private final static String WORKER_OUTPUT_QUEUE = "WORKER_OUTPUT_Q";
-
     public static void main(String[] args) {
         String inputQName = args[0];
         String outputQName = args[1];
         while (true) {
-            handleMessage(SQSUtils.recieveMSG(inputQName), outputQName, inputQName);
+            Message message = SQSUtils.recieveMSG(inputQName);
+            if (message != null) {
+                if (message.body().toLowerCase().equals("terminate")) {
+                    System.out.println("worker: shutting down... goodbye");
+                    break;
+                }
+                handleNewPDFTask(message, outputQName, inputQName);
+            }
         }
-    }
-
-    private static void handleMessage(Message message, String outputQName, String inputQName) {
-        // assuming only 1 type of message
-        System.out.println("worker: got new pdf message");
-        handleNewPDFTask(message, outputQName, inputQName);
     }
 
     /**
@@ -25,16 +24,14 @@ public class Worker {
      * upload output file to s3
      * send completed message to outputQName
      * delete handled message from inputQName
-     *
      * @param message
      * @param outputQName
      * @param inputQName
      */
     private static void handleNewPDFTask(Message message, String outputQName, String inputQName) {
-        String[] operationUrlPair = message.body().split("\t");
+        String[] operationUrlPair = message.body().split("\\s+");
         String operationName = operationUrlPair[0].toUpperCase();
         String pdfS3PathToProcess = operationUrlPair[1];
-        System.out.println("worker: handling message");
         System.out.println("worker: message body - operation name: " + operationName + ", pdf url:  " + pdfS3PathToProcess);
         String outFilePath;
         try {
@@ -44,7 +41,7 @@ public class Worker {
             String remoteOutputURL = "https://" + bucket + ".s3.amazonaws.com/" + fileKey;
             SQSUtils.sendMSG(outputQName, buildCompletedMessage(operationName, pdfS3PathToProcess, remoteOutputURL));
         } catch (Exception e) {
-            handleFailure(e, pdfS3PathToProcess, operationName);
+            handleFailure(e, pdfS3PathToProcess, operationName, outputQName);
         } finally {
             SQSUtils.deleteMSG(message, inputQName);
         }
@@ -71,8 +68,8 @@ public class Worker {
         return opName + ": " + inputFile + " " + e.getMessage();
     }
 
-    private static void handleFailure(Exception e, String inputFile, String opName) {
-        System.out.println("error on pdf task");
-        SQSUtils.sendMSG(WORKER_OUTPUT_QUEUE, buildFailedMessage(e, inputFile, opName));
+    private static void handleFailure(Exception e, String inputFile, String opName, String outQName) {
+        System.out.println("inside Worker.handleFailure()");
+        SQSUtils.sendMSG(outQName, buildFailedMessage(e, inputFile, opName));
     }
 }
