@@ -48,7 +48,7 @@ public class LocalApplication {
         String LocalManagerQName = "Local_Manager_Queue";
         // TODO: 03/04/2020 add check if Q is already exists
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
-        createQByName(LocalManagerQName, sqs);                             // Creat Q
+        BuildQueueIfNotExists(LocalManagerQName, sqs);                             // Creat Q
         String queueUrl = getQUrl(LocalManagerQName, sqs);
         String fileUrl = getFileUrl(bucket, inputFileKey);
         putMessageInSqs(sqs, queueUrl, fileUrl);
@@ -67,16 +67,13 @@ public class LocalApplication {
         } else System.out.println("Ec2 manager already running.. ");
 
 
-        // STOP HERE IF YOU WANT TO TEST LOCAL <--> WORKER CONNECTION
-
-        // Some time wasting..
 
 
 
         // ---- Read SQS summary message from manager
 
         String ManagerLocalQName = "Manager_Local_Queue";
-        createQByName(ManagerLocalQName, sqs);                             // Creat Q
+        BuildQueueIfNotExists(ManagerLocalQName, sqs);                             // Creat Q
         String qUrl = getQUrl(ManagerLocalQName, sqs);
 
         // receive messages from the queue, if empty? (maybe busy wait?)
@@ -98,6 +95,7 @@ public class LocalApplication {
         }
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
+
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
@@ -117,10 +115,6 @@ public class LocalApplication {
 
     private static void sendTerminationMessageIfNeeded(String terMessage, SqsClient sqs, String queueUrl) {
         if (terMessage.equals("terminate")) {
-            int i = 0;
-            while (i < 1000) {
-                i++;
-            }
             putMessageInSqs(sqs, queueUrl, "terminate");
         }
     }
@@ -251,6 +245,26 @@ public class LocalApplication {
         return sqs.getQueueUrl(getQueueRequest).queueUrl();
     }
 
+
+    /**
+     *
+     * @param sqsClient
+     * @param qName
+     * @return Build sqs with the name qName, if not already exists.
+     */
+
+    private static String BuildQueueIfNotExists(String qName, SqsClient sqsClient) {
+        String tasksQUrl;
+        try {
+            tasksQUrl = getQUrl(qName, sqsClient);
+            // Throw exception in the first try
+        } catch (Exception ex) {
+            createQByName(qName, sqsClient);
+            tasksQUrl = getQUrl(qName, sqsClient);
+        }
+        return tasksQUrl;
+    }
+
     /**
      * create a sqs queue with the name QUEUE_NAME, using sqs client
      * @param QUEUE_NAME
@@ -268,6 +282,9 @@ public class LocalApplication {
 
         }
     }
+
+
+
 
     /**
      * Upload first Input file to S3

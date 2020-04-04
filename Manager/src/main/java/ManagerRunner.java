@@ -100,7 +100,7 @@ public class ManagerRunner implements Runnable {
 //            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "Manager_Local_Queue" + id);
             makeAndUploadSummaryFile(sqsClient, s3, messageCount, "TasksResultsQ");
 
-            System.out.println("finish make and upload summary file, exit MannagerRunner");
+            System.out.println("finish make and upload summary file, exit ManagerRunner");
 
 
 

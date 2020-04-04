@@ -10,7 +10,7 @@ public class SQSUtils {
 
     public static void sendMSG(String qName, String messageBody) {
         System.out.println("inside SQSUtils.sendMSG()");
-        createQByName(qName);
+        BuildQueueIfNotExists(sqs, qName);
         putMessageInSqs(getQUrl(qName), messageBody);
     }
 
@@ -37,6 +37,25 @@ public class SQSUtils {
                 .build();
         sqs.deleteMessage(deleteRequest);
         return true;
+    }
+
+    /**
+     *
+     * @param sqsClient
+     * @param qName
+     * @return Build sqs with the name qName, if not already exists.
+     */
+
+    private static String BuildQueueIfNotExists(SqsClient sqsClient, String qName) {
+        String tasksQUrl;
+        try {
+            tasksQUrl = getQUrl(qName);
+            // Throw exception in the first try
+        } catch (Exception ex) {
+            createQByName(qName);
+            tasksQUrl = getQUrl(qName);
+        }
+        return tasksQUrl;
     }
 
     private static void createQByName(String QUEUE_NAME) {

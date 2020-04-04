@@ -6,7 +6,7 @@ public class SQSUtils {
     private final static SqsClient sqs = SqsClient.builder().region(Region.US_EAST_1).build();
 
     public static void sendMSG(String qName, String messageBody) {
-        createQByName(qName, sqs);
+        BuildQueueIfNotExists(sqs, qName);
         putMessageInSqs(sqs, getQUrl(qName, sqs), messageBody);
     }
 
@@ -24,6 +24,25 @@ public class SQSUtils {
                 .build();
         sqs.deleteMessage(deleteRequest);
         return true;
+    }
+
+    /**
+     *
+     * @param sqsClient
+     * @param qName
+     * @return Build sqs with the name qName, if not already exists.
+     */
+
+    private static String BuildQueueIfNotExists(SqsClient sqsClient, String qName) {
+        String tasksQUrl;
+        try {
+            tasksQUrl = getQUrl(qName, sqsClient);
+            // Throw exception in the first try
+        } catch (Exception ex) {
+            createQByName(qName, sqsClient);
+            tasksQUrl = getQUrl(qName, sqsClient);
+        }
+        return tasksQUrl;
     }
 
     private static void createQByName(String QUEUE_NAME, SqsClient sqs) {

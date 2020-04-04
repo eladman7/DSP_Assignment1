@@ -78,22 +78,12 @@ public class Manager {
                 terminateEc2Instances(ec2);
                 System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
 
-                // TODO: 04/04/2020 Check if makeAndUpload needed!
-//                makeAndUploadSummaryFile(sqsClient, s3, 3, "TasksResultsQ");
-
                 break;
             } else if (isS3Message(inputMessage.body())) {
-//                pool.execute(new ManagerRunner(String.valueOf("TasksQueue_" + new Date().getTime()), numOfMsgForWorker, inputMessage));
-
                 pool.execute(new ManagerRunner("TasksQueue",
                         "TasksResultsQ", numOfMsgForWorker, inputMessage.body()));
 
                 deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
-//                makeAndUploadSummaryFile(sqsClient, s3, 3, "TasksResultsQ");
-
-//                executor.shutdown();
-//                waitExecutorToFinish(executor);
-                // TODO: 03/04/2020 Add Num of messages, maybe from LocalApp
 
             }
         }
@@ -108,8 +98,6 @@ public class Manager {
      * @param ec2
      */
 
-
-
     private static void terminateEc2Instances(Ec2Client ec2) {
         System.out.println("enter Manager.terminateEc2Instances()");
 
@@ -119,7 +107,6 @@ public class Manager {
             DescribeInstancesResponse response = ec2.describeInstances(dRequest);
             for (Reservation reservation : response.reservations()) {
                 for (Instance instance : reservation.instances()) {
-//                    List<String> instanceIds = dRequest.instanceIds();
                     TerminateInstancesRequest request = TerminateInstancesRequest.builder().instanceIds(instance.instanceId()).build();
                     ec2.terminateInstances(request);
                 }
