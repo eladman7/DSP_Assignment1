@@ -22,16 +22,17 @@ public class LocalApplication {
 
     public static void main(String[]args) {
 
+        final String localAppId = String.valueOf(System.currentTimeMillis());
         String input_file_path = args[0];
         int numOfPdfPerWorker = Integer.parseInt(args[1]);
         String terMessage = args[2];
         File input_file = new File(input_file_path);
-        String inputFileKey = "inputFile";
-        String bucket = "bucket" + System.currentTimeMillis();
+        String inputFileKey = "inputFile" + localAppId;
+        String bucket = "bucket" + localAppId;
         S3Client s3;
         Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
-        String ec2NameManager = "manager";
+        String ec2NameManager = "Manager";
 
 
         // ---- Upload input file to s3 ----
@@ -45,12 +46,11 @@ public class LocalApplication {
 
 
         String LocalManagerQName = "Local_Manager_Queue";
-        // TODO: 03/04/2020 add check if Q is already exists
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
         BuildQueueIfNotExists(LocalManagerQName, sqs);                             // Creat Q
-        String queueUrl = getQUrl(LocalManagerQName, sqs);
+        String localManagerQUrl = getQUrl(LocalManagerQName, sqs);
         String fileUrl = getFileUrl(bucket, inputFileKey);
-        putMessageInSqs(sqs, queueUrl, fileUrl);
+        putMessageInSqs(sqs, localManagerQUrl, fileUrl);
 
 
         System.out.println("success uploading first message to sqs");
@@ -61,6 +61,7 @@ public class LocalApplication {
         Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
+            // Run manager JarFile with input : numOfPdfPerWorker.
             createEc2Instance(ec2, amiId, ec2NameManager);
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
@@ -72,26 +73,31 @@ public class LocalApplication {
         // ---- Read SQS summary message from manager
 
         String ManagerLocalQName = "Manager_Local_Queue";
-        BuildQueueIfNotExists(ManagerLocalQName, sqs);                             // Creat Q
-        String qUrl = getQUrl(ManagerLocalQName, sqs);
+        BuildQueueIfNotExists(ManagerLocalQName, sqs);
+        String managerLocalQUrl = getQUrl(ManagerLocalQName, sqs);
 
         // receive messages from the queue, if empty? (maybe busy wait?)
         System.out.println("waiting for a summary file from manager..");
         ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
-                .queueUrl(qUrl)   //which queue
+                .queueUrl(managerLocalQUrl)   //which queue
                 .build();
         List<Message> messages;
+        Message sMessage;
         String summaryMessage;
+
         //busy wait..
         while (true) {
             try {
                 messages = sqs.receiveMessage(receiveRequest).messages();
-                summaryMessage = messages.get(0).body();
+                sMessage = messages.get(0);
+                summaryMessage = sMessage.body();
                 if (summaryMessage != null)
                     break;
             } catch (IndexOutOfBoundsException ignored) {
             }
         }
+        deleteMessageFromQ(sMessage, sqs, managerLocalQUrl);
+
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
 
@@ -101,14 +107,16 @@ public class LocalApplication {
 
         try {
             s3.getObject(GetObjectRequest.builder().bucket(summaryBucket).key(summaryKey).build(),
-                    ResponseTransformer.toFile(Paths.get("summaryFile.html")));
+                    ResponseTransformer.toFile(Paths.get("summaryFile" + localAppId + ".html")));
         } catch (Exception ignored) {
             //send termination message if needed
         } finally {
-            sendTerminationMessageIfNeeded(terMessage, sqs, queueUrl);
+            sendTerminationMessageIfNeeded(terMessage, sqs, localManagerQUrl);
         }
 
         System.out.println("Local sent terminate message and finish.. Bye");
+
+        // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
     }
 
@@ -116,6 +124,22 @@ public class LocalApplication {
         if (terMessage.equals("terminate")) {
             putMessageInSqs(sqs, queueUrl, "terminate");
         }
+    }
+
+
+    /**
+     * Delete message from Q.
+     * @param message
+     * @param sqsClient
+     * @param localManagerUrl
+     */
+
+    private static void deleteMessageFromQ(Message message, SqsClient sqsClient, String localManagerUrl) {
+        DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
+                .queueUrl(localManagerUrl)
+                .receiptHandle(message.receiptHandle())
+                .build();
+        sqsClient.deleteMessage(deleteRequest);
     }
 
 
@@ -306,7 +330,6 @@ public class LocalApplication {
                 RequestBody.fromFile(input_file));
     }
 
-// TODO: 29/03/2020 check if there is another way.
 
     /**
      * Extract the file url from some s3 path

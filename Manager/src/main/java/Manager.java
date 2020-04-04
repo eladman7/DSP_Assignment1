@@ -13,18 +13,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Manager {
 
     public static void main(String[] args) {
+
         // Currently assuming there is only one LocalApplication.
 
         Region region = Region.US_EAST_1;
         List<Message> messages;
         Message inputMessage;
-//        String sqsName = args[0];
         final String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
-//        int numOfMsgForWorker = Integer.parseInt(args[1]);
+//        int numOfMsgForWorker = Integer.parseInt(args[0]);
         int numOfMsgForWorker = 1;                          // Save number of msg for each worker
         SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
         S3Client s3 = S3Client.builder().region(region).build();             // Build S3 client
@@ -54,35 +56,35 @@ public class Manager {
         // Read message from Local
         // Busy Wait until terminate message
 
-      while (true) {
-        try {
-            messages = sqsClient.receiveMessage(rRLocalManager).messages();
-            inputMessage = messages.get(0);
-            if (inputMessage.body().equals("terminate") && messages.size() == 1) {
-                System.out.println("manager get terminate message, deleting terminate message");
+        while (true) {
+            try {
+                messages = sqsClient.receiveMessage(rRLocalManager).messages();
+                inputMessage = messages.get(0);
+                // Terminate stay as is, only one send terminate and we done with this.
+                if (inputMessage.body().equals("terminate") && messages.size() == 1) {
+                    System.out.println("manager get terminate message, deleting terminate message");
 
-                deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
-                System.out.println("waiting for all local apps connections to finish");
+                    deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
+                    System.out.println("waiting for all local apps connections to finish");
 
-                executor.shutdown();
-                waitExecutorToFinish(executor);
-                System.out.println("terminating ec2 instances.. ");
+                    executor.shutdown();
+                    waitExecutorToFinish(executor);
+                    System.out.println("terminating ec2 instances.. ");
 
-                terminateEc2Instances(ec2);
-                System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
+                    terminateEc2Instances(ec2);
+                    System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
 
-                break;
-            } else if (isS3Message(inputMessage.body())) {
-                pool.execute(new ManagerRunner("TasksQueue",
-                        "TasksResultsQ", numOfMsgForWorker, inputMessage.body()));
+                    break;
+                } else if (isS3Message(inputMessage.body())) {
+                    pool.execute(new ManagerRunner("TasksQueue",
+                            "TasksResultsQ", numOfMsgForWorker, inputMessage.body(), extractId(inputMessage.body())));
 
-                deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
+                    deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
 
+                }
+            } catch (IndexOutOfBoundsException ignored) {
             }
         }
-         catch (IndexOutOfBoundsException ignored) {}
-       }
-
 
     }
 
@@ -149,6 +151,20 @@ public class Manager {
                 .build();
         //get url in order to send later
         return sqs.getQueueUrl(getQueueRequest).queueUrl();
+    }
+
+    /**
+     * @param messagePath
+     * @return the key from a sqs message
+     */
+    public static String extractId(String messagePath) {
+        Pattern pattern = Pattern.compile("(.*?)inputFile((.+?)*)");
+        Matcher matcher = pattern.matcher(messagePath);
+        if (matcher.find()) {
+
+            return matcher.group(2);
+        }
+        return " ";
     }
 }
 

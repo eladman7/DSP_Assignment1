@@ -21,7 +21,6 @@ public class S3Utils {
         return true;
     }
 
-    //todo: Public?!
     /**
      * Upload first Input file to S3
      *

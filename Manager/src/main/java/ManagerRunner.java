@@ -2,12 +2,10 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.Tag;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration;
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
@@ -22,16 +20,16 @@ public class ManagerRunner implements Runnable {
     private String TasksQName;
     private int numOfMsgForWorker;
     private String inputMessage;
-    private String workerOutputQ;
-    private static String id = "";
+    private String workerOutputQName;
+    private static String id;
 
-    // TODO: 04/04/2020 add id to constructor
 
-    public ManagerRunner(String TasksQName, String workerOutputQ, int numOfMsgForWorker, String inputMessage) {
-        this.TasksQName = TasksQName;
+    public ManagerRunner(String TasksQName, String workerOutputQ, int numOfMsgForWorker, String inputMessage, String id) {
+        this.id = id;
+        this.TasksQName = TasksQName + id;
         this.numOfMsgForWorker = numOfMsgForWorker;
         this.inputMessage = inputMessage;
-        this.workerOutputQ = workerOutputQ;
+        this.workerOutputQName = workerOutputQ + id;
 
     }
 
@@ -54,7 +52,7 @@ public class ManagerRunner implements Runnable {
 
         try {
             s3.getObject(GetObjectRequest.builder().bucket(inputBucket).key(inputKey).build(),
-                    ResponseTransformer.toFile(Paths.get("inputFile.txt")));
+                    ResponseTransformer.toFile(Paths.get("inputFile" + id + ".txt")));
         } catch (Exception ignored) {}
         finally {
 
@@ -62,8 +60,9 @@ public class ManagerRunner implements Runnable {
 
             // Create SQS message for each url in the input file.
 
-            List<String> tasks = createSqsMessages("inputFile.txt");
+            List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
             int messageCount = tasks.size();
+            System.out.println("numOfMessages: " + messageCount);
 
             int numOfRunningWorkers = numOfRunningWorkers(ec2);
             int numOfWorkers = 0;
@@ -80,7 +79,7 @@ public class ManagerRunner implements Runnable {
 
 
             // Build Workers output Q
-            BuildQueueIfNotExists(sqsClient, workerOutputQ);
+            BuildQueueIfNotExists(sqsClient, workerOutputQName);
             System.out.println("build Workers outputQ succeed");
 
 
@@ -95,10 +94,13 @@ public class ManagerRunner implements Runnable {
             System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
                     "(it sounds like a good time to lunch them!)");
 
+//            runWorkers with the inputs: TasksQName, this.workerOutputQ
+
 
 
 //            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "Manager_Local_Queue" + id);
-            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "TasksResultsQ");
+            System.out.println("Start making summary file.. ");
+            makeAndUploadSummaryFile(sqsClient, s3, messageCount, workerOutputQName);
 
             System.out.println("finish make and upload summary file, exit ManagerRunner");
 
@@ -138,7 +140,7 @@ public class ManagerRunner implements Runnable {
             for (Message message : messages) {
                 try {
                     assert summaryFile != null;
-                    summaryFile.write(message.body() + System.getProperty("line.separator"));
+                    summaryFile.write(message.body() + '\n');
                     deleteMessageFromQ(message, sqs, qUrl);
                     leftToRead--;
                 }catch (IOException ex) {
@@ -153,8 +155,13 @@ public class ManagerRunner implements Runnable {
         } catch (Exception ex) {
             System.out.println(ex.toString());
         }
-        uploadFile(new File("summaryFile" + id + ".html"), s3, "summaryfilebucket" + id, "test");
-        putMessageInSqs(sqs, getQUrl("Manager_Local_Queue", sqs), getFileUrl("summaryfilebucket", "test"));
+        System.out.println("finish making summaryFile.. start uploading summary file..");
+        uploadFile(new File("summaryFile" + id + ".html"), s3,
+                "summary-files-bucket" + id, "summaryFile");
+
+        System.out.println("finish uploading file..put message in sqs ");
+        putMessageInSqs(sqs, getQUrl("Manager_Local_Queue", sqs),
+                getFileUrl("summary-files-bucket" + id, "summaryFile"));
     }
 
 
@@ -168,13 +175,16 @@ public class ManagerRunner implements Runnable {
 
     private static void uploadFile(File file, S3Client s3, String bucket, String key) {
 
-        s3.createBucket(CreateBucketRequest
-                .builder()
-                .bucket(bucket)
-                .createBucketConfiguration(
-                        CreateBucketConfiguration.builder()
-                                .build())
-                .build());
+        try {
+            s3.createBucket(CreateBucketRequest
+                    .builder()
+                    .bucket(bucket)
+                    .createBucketConfiguration(
+                            CreateBucketConfiguration.builder()
+                                    .build())
+                    .build());
+        }
+        catch(BucketAlreadyExistsException ignored) {}
 
 
         s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
@@ -241,17 +251,18 @@ public class ManagerRunner implements Runnable {
      * @param amiId
      */
     public static void createWorkers (int numOfWorkers, Ec2Client ec2, String amiId) {
-        for (int index = 0; index < numOfWorkers; index++) {
             RunInstancesRequest runRequest = RunInstancesRequest.builder()
                     .imageId(amiId)
                     .instanceType(InstanceType.T2_MICRO)
-                    .maxCount(1)
-                    .minCount(1)
+                    .maxCount(numOfWorkers)
+                    .minCount(numOfWorkers)
                     .build();
 
             RunInstancesResponse response = ec2.runInstances(runRequest);
 
-            String instanceId = response.instances().get(0).instanceId();
+        for (int index = 0; index < numOfWorkers; index++) {
+
+            String instanceId = response.instances().get(index).instanceId();
 
             Tag tag = Tag.builder()
                     .key("name")
@@ -269,8 +280,8 @@ public class ManagerRunner implements Runnable {
                         "Successfully started EC2 instance: " + instanceId + "based on AMI: " + amiId);
 
             } catch (Ec2Exception e) {
-                System.err.println(e.getMessage());
-                System.exit(1);
+                System.err.println("error while tagging an instance.. trying again");
+                index--;
             }
         }
     }
@@ -285,15 +296,14 @@ public class ManagerRunner implements Runnable {
         String nextToken = null;
         int counter = 0;
         do {
-            // TODO: 30/03/2020 check without maxResults
-            DescribeInstancesRequest request = DescribeInstancesRequest.builder().maxResults(6).nextToken(nextToken).build();
+            DescribeInstancesRequest request = DescribeInstancesRequest.builder().nextToken(nextToken).build();
             DescribeInstancesResponse response = ec2.describeInstances(request);
 
             for (Reservation reservation : response.reservations()) {
                 for (Instance instance : reservation.instances()) {
                     List<Tag> tagList = instance.tags();
                     for (Tag tag : tagList) {
-                        if (!tag.value().equals("manager") &&
+                        if (!tag.value().equals("Manager") &&
                                 (instance.state().name().toString().equals("running") ||
                                         instance.state().name().toString().equals("pending")))
                             counter++;
@@ -362,7 +372,6 @@ public class ManagerRunner implements Runnable {
             while (line != null) {
                 tasks.add(line);
                 line = reader.readLine();
-
             }
         } catch (IOException ex) {
             ex.printStackTrace();

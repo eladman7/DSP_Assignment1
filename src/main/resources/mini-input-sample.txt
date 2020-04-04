@@ -1,1 +1,2 @@
 ToImage https://www.bethelnewton.org/images/Passover_Guide_BOOKLET.pdf
+ToImage	http://www.thebagelemporium.com/images/BE-Holiday-Menu.pdf
