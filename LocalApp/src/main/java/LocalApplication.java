@@ -43,7 +43,6 @@ public class LocalApplication {
 
         // ---- Upload first message to sqs
 
-//        String LocalManagerQName = "Local_Manager_Queue" + new Date().getTime();
 
         String LocalManagerQName = "Local_Manager_Queue";
         // TODO: 03/04/2020 add check if Q is already exists
@@ -147,7 +146,6 @@ public class LocalApplication {
         return " ";
     }
 
-    // TODO: 02/04/2020  check this strange 6.
     /**
      * @param ec2
      * @return true iff the manager running
@@ -257,7 +255,6 @@ public class LocalApplication {
         String tasksQUrl;
         try {
             tasksQUrl = getQUrl(qName, sqsClient);
-            // Throw exception in the first try
         } catch (Exception ex) {
             createQByName(qName, sqsClient);
             tasksQUrl = getQUrl(qName, sqsClient);
