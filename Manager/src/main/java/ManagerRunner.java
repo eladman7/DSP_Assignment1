@@ -1,15 +1,17 @@
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Paths;
 import java.util.LinkedList;
 import java.util.List;
@@ -21,6 +23,9 @@ public class ManagerRunner implements Runnable {
     private int numOfMsgForWorker;
     private String inputMessage;
     private String workerOutputQ;
+    private static String id = "";
+
+    // TODO: 04/04/2020 add id to constructor
 
     public ManagerRunner(String TasksQName, String workerOutputQ, int numOfMsgForWorker, String inputMessage) {
         this.TasksQName = TasksQName;
@@ -29,6 +34,7 @@ public class ManagerRunner implements Runnable {
         this.workerOutputQ = workerOutputQ;
 
     }
+
 
     @Override
     public void run() {
@@ -43,15 +49,22 @@ public class ManagerRunner implements Runnable {
 
         String inputBucket = extractBucket(inputMessage);
         String inputKey = extractKey(inputMessage);
+
         //download input file, Save under "inputFile.txt"
+
         try {
             s3.getObject(GetObjectRequest.builder().bucket(inputBucket).key(inputKey).build(),
                     ResponseTransformer.toFile(Paths.get("inputFile.txt")));
         } catch (Exception ignored) {}
         finally {
 
+
+
+            // Create SQS message for each url in the input file.
+
             List<String> tasks = createSqsMessages("inputFile.txt");
             int messageCount = tasks.size();
+
             int numOfRunningWorkers = numOfRunningWorkers(ec2);
             int numOfWorkers = 0;
 
@@ -79,11 +92,96 @@ public class ManagerRunner implements Runnable {
                 putMessageInSqs(sqsClient, tasksQUrl, task);
             }
 
-            System.out.println("Delegated all tasks to workers");
+            System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
+                    "(it sounds like a good time to lunch them!)");
+
+
+
+//            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "Manager_Local_Queue" + id);
+            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "TasksResultsQ");
+
+            System.out.println("finish make and upload summary file, exit MannagerRunner");
+
+
+
+
         }
 
 
     }
+
+
+    /**
+     * Make summary file from all workers results and upload to s3 bucket, named "summaryfilebucket"
+     * so in order to make this work there is bucket with this name before the function run
+     * @param sqs
+     * @param s3
+     * @param numOfMessages
+     * @param tasksResultQName
+     */
+
+
+    private static void makeAndUploadSummaryFile(SqsClient sqs,
+                                                 S3Client s3, int numOfMessages, String tasksResultQName) {
+        int leftToRead = numOfMessages;
+        FileWriter summaryFile = null;
+        try {
+            summaryFile = new FileWriter("summaryFile" + id + ".html");
+        }   catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        }
+        String qUrl = getQUrl(tasksResultQName, sqs);
+
+        while (leftToRead > 0) {
+            ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder().queueUrl(qUrl).build();
+            List<Message> messages = sqs.receiveMessage(receiveMessageRequest).messages();
+            for (Message message : messages) {
+                try {
+                    assert summaryFile != null;
+                    summaryFile.write(message.body() + System.getProperty("line.separator"));
+                    deleteMessageFromQ(message, sqs, qUrl);
+                    leftToRead--;
+                }catch (IOException ex) {
+                    System.out.println(ex.toString());
+                }
+
+            }
+        }
+        try {
+            assert summaryFile != null;
+            summaryFile.close();
+        } catch (Exception ex) {
+            System.out.println(ex.toString());
+        }
+        uploadFile(new File("summaryFile" + id + ".html"), s3, "summaryfilebucket" + id, "test");
+        putMessageInSqs(sqs, getQUrl("Manager_Local_Queue", sqs), getFileUrl("summaryfilebucket", "test"));
+    }
+
+
+    /**
+     * Upload first file to S3
+     * @param file
+     * @param s3
+     * @param bucket
+     * @param key
+     */
+
+    private static void uploadFile(File file, S3Client s3, String bucket, String key) {
+
+        s3.createBucket(CreateBucketRequest
+                .builder()
+                .bucket(bucket)
+                .createBucketConfiguration(
+                        CreateBucketConfiguration.builder()
+                                .build())
+                .build());
+
+
+        s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+                RequestBody.fromFile(file));
+    }
+
+
 
     /**
      *
@@ -271,6 +369,19 @@ public class ManagerRunner implements Runnable {
         }
         return tasks;
     }
+
+
+    private static void deleteMessageFromQ(Message message, SqsClient sqsClient, String localManagerUrl) {
+        DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
+                .queueUrl(localManagerUrl)
+                .receiptHandle(message.receiptHandle())
+                .build();
+        sqsClient.deleteMessage(deleteRequest);
+    }
+    private static String getFileUrl (String bucket, String key) {
+        return "s3://" + bucket + "/" + key;
+    }
+
 
 }
 

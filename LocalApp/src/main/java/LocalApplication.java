@@ -46,11 +46,14 @@ public class LocalApplication {
 //        String LocalManagerQName = "Local_Manager_Queue" + new Date().getTime();
 
         String LocalManagerQName = "Local_Manager_Queue";
+        // TODO: 03/04/2020 add check if Q is already exists
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
         createQByName(LocalManagerQName, sqs);                             // Creat Q
         String queueUrl = getQUrl(LocalManagerQName, sqs);
         String fileUrl = getFileUrl(bucket, inputFileKey);
         putMessageInSqs(sqs, queueUrl, fileUrl);
+
+
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance
@@ -63,21 +66,23 @@ public class LocalApplication {
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
-        // Some time wasting..
-        int i = 0;
-        while (i < 1000) {
-            i++;
-        }
-//        putMessageInSqs(sqs, queueUrl, "terminate");
 
         // STOP HERE IF YOU WANT TO TEST LOCAL <--> WORKER CONNECTION
+
+        // Some time wasting..
+
 
 
         // ---- Read SQS summary message from manager
 
+        String ManagerLocalQName = "Manager_Local_Queue";
+        createQByName(ManagerLocalQName, sqs);                             // Creat Q
+        String qUrl = getQUrl(ManagerLocalQName, sqs);
+
         // receive messages from the queue, if empty? (maybe busy wait?)
+        System.out.println("waiting for a summary file from manager..");
         ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
-                .queueUrl(queueUrl)   //which queue
+                .queueUrl(qUrl)   //which queue
                 .build();
         List<Message> messages;
         String summaryMessage;
@@ -86,9 +91,12 @@ public class LocalApplication {
             try {
                 messages = sqs.receiveMessage(receiveRequest).messages();
                 summaryMessage = messages.get(0).body();
-                break;
-            } catch (IndexOutOfBoundsException ignored) {}
+                if (summaryMessage != null)
+                    break;
+            } catch (IndexOutOfBoundsException ignored) {
+            }
         }
+        System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
@@ -97,16 +105,24 @@ public class LocalApplication {
         try {
             s3.getObject(GetObjectRequest.builder().bucket(summaryBucket).key(summaryKey).build(),
                     ResponseTransformer.toFile(Paths.get("summaryFile.html")));
-        } catch (Exception ex) {
-            System.out.println(ex.getMessage());
+        } catch (Exception ignored) {
+            //send termination message if needed
         } finally {
-
-            if (args[2].equals("terminate")) {
-                String localManagerUrl = getQUrl(LocalManagerQName, sqs);
-                putMessageInSqs(sqs, localManagerUrl, "terminate");
-            }
+            sendTerminationMessageIfNeeded(terMessage, sqs, queueUrl);
         }
 
+        System.out.println("Local sent terminate message and finish.. Bye");
+
+    }
+
+    private static void sendTerminationMessageIfNeeded(String terMessage, SqsClient sqs, String queueUrl) {
+        if (terMessage.equals("terminate")) {
+            int i = 0;
+            while (i < 1000) {
+                i++;
+            }
+            putMessageInSqs(sqs, queueUrl, "terminate");
+        }
     }
 
 
@@ -137,6 +153,7 @@ public class LocalApplication {
         return " ";
     }
 
+    // TODO: 02/04/2020  check this strange 6.
     /**
      * @param ec2
      * @return true iff the manager running
@@ -144,7 +161,8 @@ public class LocalApplication {
     public static boolean isManagerRunning(Ec2Client ec2) {
             String nextToken = null;
                  do {
-                    DescribeInstancesRequest request = DescribeInstancesRequest.builder().maxResults(6).nextToken(nextToken).build();
+//                     DescribeInstancesRequest request = DescribeInstancesRequest.builder().maxResults(6).nextToken(nextToken).build();
+                    DescribeInstancesRequest request = DescribeInstancesRequest.builder().nextToken(nextToken).build();
                     DescribeInstancesResponse response = ec2.describeInstances(request);
 
                     for (Reservation reservation : response.reservations()) {
@@ -170,7 +188,7 @@ public class LocalApplication {
      * @param amiId
      * @param ec2Name
      */
-        
+
     private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) {
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()

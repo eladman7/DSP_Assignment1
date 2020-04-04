@@ -1,5 +1,7 @@
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
@@ -28,11 +30,13 @@ public class Manager {
         List<Message> messages;
         Message inputMessage;
 //        String sqsName = args[0];
-        String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
+        final String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
 //        int numOfMsgForWorker = Integer.parseInt(args[1]);
         int numOfMsgForWorker = 1;                          // Save number of msg for each worker
         SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
         S3Client s3 = S3Client.builder().region(region).build();             // Build S3 client
+        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
+
 
         String localManagerUrl = getQUrl(sqsName, sqsClient);
         ReceiveMessageRequest rRLocalManager;
@@ -41,7 +45,8 @@ public class Manager {
         ThreadPoolExecutor pool = (ThreadPoolExecutor) executor;
 
 
-        //connect to the Queue
+        // Connect to the Queue
+
         while (true) {
             try {
                 rRLocalManager = ReceiveMessageRequest.builder()
@@ -54,42 +59,74 @@ public class Manager {
 
 
         // Read message from Local
+        // Busy Wait until terminate message
 
-        //Uncomment this if u want MultiThreading
-//        while (true) {
+      while (true) {
         try {
             messages = sqsClient.receiveMessage(rRLocalManager).messages();
             inputMessage = messages.get(0);
             if (inputMessage.body().equals("terminate") && messages.size() == 1) {
-                executor.shutdown();
+                System.out.println("manager get terminate message, deleting terminate message");
+
                 deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
-                waitExecutorToFinish(executor);
-//                    break;
-            }
-            else if(isS3Message(inputMessage.body())) {
-//                pool.execute(new ManagerRunner(String.valueOf("TasksQueue_" + new Date().getTime()), numOfMsgForWorker, inputMessage));
-
-                pool.execute(new ManagerRunner("TasksQueue" ,
-                        "TasksResultsQ", numOfMsgForWorker, inputMessage.body()));
-
-//                deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
+                System.out.println("waiting for all local apps connections to finish");
 
                 executor.shutdown();
                 waitExecutorToFinish(executor);
-                // TODO: 03/04/2020 Add Num of messages, maybe from LocalApp
+                System.out.println("terminating ec2 instances.. ");
+
+                terminateEc2Instances(ec2);
+                System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
+
+                // TODO: 04/04/2020 Check if makeAndUpload needed!
 //                makeAndUploadSummaryFile(sqsClient, s3, 3, "TasksResultsQ");
 
+                break;
+            } else if (isS3Message(inputMessage.body())) {
+//                pool.execute(new ManagerRunner(String.valueOf("TasksQueue_" + new Date().getTime()), numOfMsgForWorker, inputMessage));
+
+                pool.execute(new ManagerRunner("TasksQueue",
+                        "TasksResultsQ", numOfMsgForWorker, inputMessage.body()));
+
+                deleteMessageFromQ(inputMessage, sqsClient, localManagerUrl);
+//                makeAndUploadSummaryFile(sqsClient, s3, 3, "TasksResultsQ");
+
+//                executor.shutdown();
+//                waitExecutorToFinish(executor);
+                // TODO: 03/04/2020 Add Num of messages, maybe from LocalApp
+
             }
-//            }
-        } catch (IndexOutOfBoundsException ignored) {}
-        finally {
-
-
-//
         }
-//       }
+         catch (IndexOutOfBoundsException ignored) {}
+       }
 
 
+    }
+
+    /**
+     * Terminate all running ec2 instances
+     * @param ec2
+     */
+
+
+
+    private static void terminateEc2Instances(Ec2Client ec2) {
+        System.out.println("enter Manager.terminateEc2Instances()");
+
+        String nextToken = null;
+        do {
+            DescribeInstancesRequest dRequest = DescribeInstancesRequest.builder().nextToken(nextToken).build();
+            DescribeInstancesResponse response = ec2.describeInstances(dRequest);
+            for (Reservation reservation : response.reservations()) {
+                for (Instance instance : reservation.instances()) {
+//                    List<String> instanceIds = dRequest.instanceIds();
+                    TerminateInstancesRequest request = TerminateInstancesRequest.builder().instanceIds(instance.instanceId()).build();
+                    ec2.terminateInstances(request);
+                }
+            }
+            nextToken = response.nextToken();
+        } while (nextToken != null);
+        System.out.println("exit Manager.terminateEc2Instances()");
     }
 
 
@@ -103,7 +140,8 @@ public class Manager {
      */
 
 
-    private static void makeAndUploadSummaryFile(SqsClient sqs, S3Client s3, int numOfMessages, String tasksResultQName) {
+    private static void makeAndUploadSummaryFile(SqsClient sqs,
+                                                 S3Client s3, int numOfMessages, String tasksResultQName) {
         int leftToRead = numOfMessages;
         FileWriter summaryFile = null;
         try {
