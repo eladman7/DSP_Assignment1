@@ -28,7 +28,7 @@ public class LocalApplication {
         String terMessage = args[2];
         File input_file = new File(input_file_path);
         String inputFileKey = "inputFile" + localAppId;
-        String bucket = "bucket" + localAppId;
+        String bucket = "dsp-private-bucket";
         S3Client s3;
         Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
@@ -72,7 +72,7 @@ public class LocalApplication {
 
         // ---- Read SQS summary message from manager
 
-        String ManagerLocalQName = "Manager_Local_Queue";
+        String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
         BuildQueueIfNotExists(ManagerLocalQName, sqs);
         String managerLocalQUrl = getQUrl(ManagerLocalQName, sqs);
 
@@ -101,6 +101,7 @@ public class LocalApplication {
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
 
+        // TODO: 05/04/2020 check for the key
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);

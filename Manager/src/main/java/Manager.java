@@ -1,7 +1,6 @@
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
-import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
@@ -29,7 +28,6 @@ public class Manager {
 //        int numOfMsgForWorker = Integer.parseInt(args[0]);
         int numOfMsgForWorker = 1;                          // Save number of msg for each worker
         SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
-        S3Client s3 = S3Client.builder().region(region).build();             // Build S3 client
         Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
 
 

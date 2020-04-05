@@ -157,11 +157,11 @@ public class ManagerRunner implements Runnable {
         }
         System.out.println("finish making summaryFile.. start uploading summary file..");
         uploadFile(new File("summaryFile" + id + ".html"), s3,
-                "summary-files-bucket" + id, "summaryFile");
+                "dsp-private-bucket", "summaryFile");
 
         System.out.println("finish uploading file..put message in sqs ");
-        putMessageInSqs(sqs, getQUrl("Manager_Local_Queue", sqs),
-                getFileUrl("summary-files-bucket" + id, "summaryFile"));
+        putMessageInSqs(sqs, getQUrl("Manager_Local_Queue" + id, sqs),
+                getFileUrl("dsp-private-bucket", "summaryFile"));
     }
 
 
