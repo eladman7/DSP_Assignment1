@@ -10,6 +10,9 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -55,7 +58,11 @@ public class LocalApplication {
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
-            createEc2Instance(ec2, amiId, ec2NameManager);
+            try {
+                createEc2Instance(ec2, amiId, ec2NameManager);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
@@ -114,16 +121,16 @@ public class LocalApplication {
     private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {
 
         DeleteQueueRequest deleteManLocQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("Manager_Local_Queue"+localAppId, sqs)).build();
+                queueUrl(getQUrl("Manager_Local_Queue" + localAppId, sqs)).build();
         DeleteQueueRequest deleteTasksQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("TasksQueue"+localAppId, sqs)).build();
+                queueUrl(getQUrl("TasksQueue" + localAppId, sqs)).build();
         DeleteQueueRequest deleteTasksResultsQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("TasksResultsQ"+localAppId, sqs)).build();
+                queueUrl(getQUrl("TasksResultsQ" + localAppId, sqs)).build();
         try {
             sqs.deleteQueue(deleteManLocQ);
             sqs.deleteQueue(deleteTasksQ);
             sqs.deleteQueue(deleteTasksResultsQ);
-        }catch (Exception ex) {
+        } catch (Exception ex) {
             System.out.println("There is some problem in deleting local app Q's");
         }
     }
@@ -137,6 +144,7 @@ public class LocalApplication {
 
     /**
      * Delete message from Q.
+     *
      * @param message
      * @param sqsClient
      * @param localManagerUrl
@@ -208,18 +216,24 @@ public class LocalApplication {
 
     /**
      * create an Ec2 instance
+     *
      * @param ec2
      * @param amiId
      * @param ec2Name
      */
 
-    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) {
+    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) throws IOException {
         String bucketName = "managercode" + System.currentTimeMillis(); //dsp-private-bucket
         String fileKey = "managerapp";
-        S3Utils.uploadFile("/Users/eman/IdeaProjects/DSP-Assignment1/out/artifacts/Manager_jar/Manager.jar",
+        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
                 fileKey, bucketName);
+
+        String cred = new String(Files.readAllBytes(Paths.get("/Users/eman/IdeaProjects/DSP-Assignment1/Manager/src/main/resources/credentials")));
+        String mkdir = "mkdir /home/.aws/\n";
+        String createCredentials = "echo \"" + cred + "\" > /home/.aws/credentials";
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\nwget " + s3Path + " -O manager.jar\n" + "java -jar manager.jar\n";
+        String script = "#!/bin/bash\n" + mkdir + createCredentials + "\nwget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
+                "java -jar /home/ec2-user/manager.jar\n";
         System.out.println("user data: " + script);
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
@@ -251,6 +265,7 @@ public class LocalApplication {
 
     /**
      * put message in sqs with the url queueUrl
+     *
      * @param sqs
      * @param queueUrl
      * @param message
@@ -298,6 +313,7 @@ public class LocalApplication {
 
     /**
      * create a sqs queue with the name QUEUE_NAME, using sqs client
+     *
      * @param QUEUE_NAME
      * @param sqs
      */
@@ -317,6 +333,7 @@ public class LocalApplication {
 
     /**
      * Upload first Input file to S3
+     *
      * @param input_file
      * @param s3
      * @param bucket
@@ -338,6 +355,7 @@ public class LocalApplication {
 
     /**
      * Extract the file url from some s3 path
+     *
      * @param bucket
      * @param key
      * @return
