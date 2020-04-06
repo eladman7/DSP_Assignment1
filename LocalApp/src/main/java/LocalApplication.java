@@ -115,10 +115,28 @@ public class LocalApplication {
             sendTerminationMessageIfNeeded(terMessage, sqs, localManagerQUrl);
         }
 
-        System.out.println("Local sent terminate message and finish.. Bye");
+        System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
+        deleteLocalAppQueues(localAppId, sqs);
 
         // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
+    }
+
+    private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {
+
+        DeleteQueueRequest deleteManLocQ = DeleteQueueRequest.builder().
+                queueUrl(getQUrl("Manager_Local_Queue"+localAppId, sqs)).build();
+        DeleteQueueRequest deleteTasksQ = DeleteQueueRequest.builder().
+                queueUrl(getQUrl("TasksQueue"+localAppId, sqs)).build();
+        DeleteQueueRequest deleteTasksResultsQ = DeleteQueueRequest.builder().
+                queueUrl(getQUrl("TasksResultsQ"+localAppId, sqs)).build();
+        try {
+            sqs.deleteQueue(deleteManLocQ);
+            sqs.deleteQueue(deleteTasksQ);
+            sqs.deleteQueue(deleteTasksResultsQ);
+        }catch (Exception ex) {
+            System.out.println("There is some problem in deleting local app Q's");
+        }
     }
 
     private static void sendTerminationMessageIfNeeded(String terMessage, SqsClient sqs, String queueUrl) {

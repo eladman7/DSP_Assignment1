@@ -9,11 +9,6 @@ public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
 
-//    public static String uploadFile(String fileLocalPath, String fileKey) {
-//        String bucketName = "bucket" + System.currentTimeMillis();
-//        uploadFile(fileLocalPath, fileKey, bucketName);
-//        return bucketName;
-//    }
     public static String uploadFile(String fileLocalPath, String fileKey) {
         String bucketName = "dsp-public-bucket";
         uploadFile(fileLocalPath, fileKey, bucketName);
@@ -47,17 +42,4 @@ public class S3Utils {
         s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
                 RequestBody.fromFile(input_file));
     }
-
-//    private static void uploadInputFile(File input_file, String bucket, String key) {
-//        s3.createBucket(CreateBucketRequest
-//                .builder()
-//                .acl(BucketCannedACL.PUBLIC_READ_WRITE)
-//                .bucket(bucket)
-//                .createBucketConfiguration(
-//                        CreateBucketConfiguration.builder()
-//                                .build())
-//                .build());
-//        s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
-//                RequestBody.fromFile(input_file));
-//    }
 }
