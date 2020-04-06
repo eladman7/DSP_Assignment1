@@ -9,6 +9,7 @@
         <module name="Manager" />
         <module name="LocalApp" />
         <module name="Worker" />
+        <module name="utils" />
       </profile>
     </annotationProcessing>
   </component>

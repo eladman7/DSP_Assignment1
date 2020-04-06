@@ -10,6 +10,9 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -25,7 +28,7 @@ public class LocalApplication {
         int numOfPdfPerWorker = Integer.parseInt(args[1]);
         String terMessage = args[2];
         String inputFileKey = "inputFile" + localAppId;
-        String bucket = "dsp-private-bucket" + System.currentTimeMillis();
+        String bucket = "dsp-private-bucket";
         Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
         String ec2NameManager = "Manager";
@@ -55,11 +58,8 @@ public class LocalApplication {
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
-            try {
-                createEc2Instance(ec2, amiId, ec2NameManager);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            createEc2Instance(ec2, amiId, ec2NameManager);
+
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
@@ -218,16 +218,24 @@ public class LocalApplication {
      */
 
     private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) {
-        String bucketName = "managercode" + System.currentTimeMillis(); //dsp-private-bucket
+        String bucketName = "managercode" + System.currentTimeMillis();// TODO: 06/04/2020   //dsp-private-bucket
         String fileKey = "managerapp";
-        S3Utils.uploadFile("/Users/eman/IdeaProjects/DSP-Assignment1/out/artifacts/Manager_jar/Manager.jar",
+        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
                 fileKey, bucketName);
+        String cred = "";
+        try {
+            cred = new String(Files.readAllBytes(Paths.
+                    get("/home/bar/IdeaProjects/Assignment1/Manager/src/main/resources/credentials")));
 
-        String cred = new String(Files.readAllBytes(Paths.get("/Users/eman/IdeaProjects/DSP-Assignment1/Manager/src/main/resources/credentials")));
+        }catch (IOException ex) {
+            System.out.println("fail reading credentials.");
+            System.exit(1);
+        }
         String mkdir = "mkdir /home/.aws/\n";
         String createCredentials = "echo \"" + cred + "\" > /home/.aws/credentials";
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\nwget " + s3Path + " -O manager.jar\n" + "java -jar manager.jar\n";
+        String script = "#!/bin/bash\n" +mkdir+"\n"+ createCredentials+"\n"+
+                "wget " + s3Path + " -O manager.jar\n" + "java -jar manager.jar\n";
         System.out.println("user data: " + script);
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
@@ -235,7 +243,6 @@ public class LocalApplication {
                 .maxCount(1)
                 .minCount(1)
                 .userData(Base64.getEncoder().encodeToString(script.getBytes()))
-                .keyName("eladkey")
                 .build();
         RunInstancesResponse response = ec2.runInstances(runRequest);
         String instanceId = response.instances().get(0).instanceId();
