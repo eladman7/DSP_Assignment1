@@ -101,7 +101,6 @@ public class LocalApplication {
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
 
-        // TODO: 05/04/2020 check for the key
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
@@ -116,27 +115,27 @@ public class LocalApplication {
         }
 
         System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
-        deleteLocalAppQueues(localAppId, sqs);
+        try {
+            deleteLocalAppQueues(localAppId, sqs);
+        } catch (Exception ex) {
+            System.out.println("There is some problem in deleting local app Q's:" ex.getMessage());
+        }
 
-        // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
     }
 
-    private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {
+    private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) throws Exception {
 
         DeleteQueueRequest deleteManLocQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("Manager_Local_Queue"+localAppId, sqs)).build();
+                queueUrl(getQUrl("Manager_Local_Queue" + localAppId, sqs)).build();
         DeleteQueueRequest deleteTasksQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("TasksQueue"+localAppId, sqs)).build();
+                queueUrl(getQUrl("TasksQueue" + localAppId, sqs)).build();
         DeleteQueueRequest deleteTasksResultsQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("TasksResultsQ"+localAppId, sqs)).build();
-        try {
-            sqs.deleteQueue(deleteManLocQ);
-            sqs.deleteQueue(deleteTasksQ);
-            sqs.deleteQueue(deleteTasksResultsQ);
-        }catch (Exception ex) {
-            System.out.println("There is some problem in deleting local app Q's");
-        }
+                queueUrl(getQUrl("TasksResultsQ" + localAppId, sqs)).build();
+
+        sqs.deleteQueue(deleteManLocQ);
+        sqs.deleteQueue(deleteTasksQ);
+        sqs.deleteQueue(deleteTasksResultsQ);
     }
 
     private static void sendTerminationMessageIfNeeded(String terMessage, SqsClient sqs, String queueUrl) {
