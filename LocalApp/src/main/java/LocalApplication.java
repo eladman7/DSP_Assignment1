@@ -118,7 +118,7 @@ public class LocalApplication {
         try {
             deleteLocalAppQueues(localAppId, sqs);
         } catch (Exception ex) {
-            System.out.println("There is some problem in deleting local app Q's:" ex.getMessage());
+            System.out.println("There is some problem in deleting local app Q's:" + ex.getMessage());
         }
 
 
