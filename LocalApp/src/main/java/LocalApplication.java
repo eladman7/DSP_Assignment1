@@ -55,7 +55,11 @@ public class LocalApplication {
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
-            createEc2Instance(ec2, amiId, ec2NameManager);
+            try {
+                createEc2Instance(ec2, amiId, ec2NameManager);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
@@ -91,6 +95,7 @@ public class LocalApplication {
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
 
+        // TODO: 05/04/2020 check for the key
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
@@ -104,16 +109,13 @@ public class LocalApplication {
         }
 
         System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
-        try {
-            deleteLocalAppQueues(localAppId, sqs);
-        } catch (Exception ex) {
-            System.out.println("There is some problem in deleting local app Q's:" + ex.getMessage());
-        }
+        deleteLocalAppQueues(localAppId, sqs);
 
+        // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
     }
 
-    private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) throws Exception {
+    private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {
 
         DeleteQueueRequest deleteManLocQ = DeleteQueueRequest.builder().
                 queueUrl(getQUrl("Manager_Local_Queue" + localAppId, sqs)).build();
@@ -121,10 +123,13 @@ public class LocalApplication {
                 queueUrl(getQUrl("TasksQueue" + localAppId, sqs)).build();
         DeleteQueueRequest deleteTasksResultsQ = DeleteQueueRequest.builder().
                 queueUrl(getQUrl("TasksResultsQ" + localAppId, sqs)).build();
-
-        sqs.deleteQueue(deleteManLocQ);
-        sqs.deleteQueue(deleteTasksQ);
-        sqs.deleteQueue(deleteTasksResultsQ);
+        try {
+            sqs.deleteQueue(deleteManLocQ);
+            sqs.deleteQueue(deleteTasksQ);
+            sqs.deleteQueue(deleteTasksResultsQ);
+        } catch (Exception ex) {
+            System.out.println("There is some problem in deleting local app Q's");
+        }
     }
 
     private static void sendTerminationMessageIfNeeded(String terMessage, SqsClient sqs, String queueUrl) {
@@ -217,6 +222,10 @@ public class LocalApplication {
         String fileKey = "managerapp";
         S3Utils.uploadFile("/Users/eman/IdeaProjects/DSP-Assignment1/out/artifacts/Manager_jar/Manager.jar",
                 fileKey, bucketName);
+
+        String cred = new String(Files.readAllBytes(Paths.get("/Users/eman/IdeaProjects/DSP-Assignment1/Manager/src/main/resources/credentials")));
+        String mkdir = "mkdir /home/.aws/\n";
+        String createCredentials = "echo \"" + cred + "\" > /home/.aws/credentials";
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\nwget " + s3Path + " -O manager.jar\n" + "java -jar manager.jar\n";
         System.out.println("user data: " + script);
