@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 
 public class LocalApplication {
 
+    private static final String PRIVATE_BUCKET = "dsp-private-bucket";
 
     public static void main(String[] args) {
 
@@ -58,8 +59,11 @@ public class LocalApplication {
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
-            createEc2Instance(ec2, amiId, ec2NameManager);
-
+            try {
+                createEc2Instance(ec2, amiId, ec2NameManager);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
@@ -141,6 +145,7 @@ public class LocalApplication {
 
     /**
      * Delete message from Q.
+     *
      * @param message
      * @param sqsClient
      * @param localManagerUrl
@@ -212,37 +217,34 @@ public class LocalApplication {
 
     /**
      * create an Ec2 instance
+     *
      * @param ec2
      * @param amiId
      * @param ec2Name
      */
 
-    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) {
-        String bucketName = "managercode" + System.currentTimeMillis();// TODO: 06/04/2020   //dsp-private-bucket
+    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) throws IOException {
+        String bucketName = PRIVATE_BUCKET;
         String fileKey = "managerapp";
-        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
+        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
                 fileKey, bucketName);
-        String cred = "";
-        try {
-            cred = new String(Files.readAllBytes(Paths.
-                    get("/home/bar/IdeaProjects/Assignment1/Manager/src/main/resources/credentials")));
 
-        }catch (IOException ex) {
-            System.out.println("fail reading credentials.");
-            System.exit(1);
-        }
-        String mkdir = "mkdir /home/.aws/\n";
-        String createCredentials = "echo \"" + cred + "\" > /home/.aws/credentials";
+        String cred = new String(Files.readAllBytes(Paths.get("/Users/eman/IdeaProjects/DSP-Assignment1/Manager/src/main/resources/credentials")));
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\n" +mkdir+"\n"+ createCredentials+"\n"+
-                "wget " + s3Path + " -O manager.jar\n" + "java -jar manager.jar\n";
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
+                "java -jar /home/ec2-user/manager.jar\n";
         System.out.println("user data: " + script);
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
+                .iamInstanceProfile(IamInstanceProfileSpecification.builder()
+                        .arn("arn:aws:iam::882762034269:instance-profile/role1")
+                        .build())
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(1)
                 .minCount(1)
                 .userData(Base64.getEncoder().encodeToString(script.getBytes()))
+                .keyName("eladkey")
                 .build();
         RunInstancesResponse response = ec2.runInstances(runRequest);
         String instanceId = response.instances().get(0).instanceId();
@@ -266,6 +268,7 @@ public class LocalApplication {
 
     /**
      * put message in sqs with the url queueUrl
+     *
      * @param sqs
      * @param queueUrl
      * @param message
@@ -313,6 +316,7 @@ public class LocalApplication {
 
     /**
      * create a sqs queue with the name QUEUE_NAME, using sqs client
+     *
      * @param QUEUE_NAME
      * @param sqs
      */
@@ -332,6 +336,7 @@ public class LocalApplication {
 
     /**
      * Upload first Input file to S3
+     *
      * @param input_file
      * @param s3
      * @param bucket
@@ -353,6 +358,7 @@ public class LocalApplication {
 
     /**
      * Extract the file url from some s3 path
+     *
      * @param bucket
      * @param key
      * @return
