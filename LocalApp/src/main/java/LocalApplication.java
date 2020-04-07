@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 
 public class LocalApplication {
 
+    private static final String PRIVATE_BUCKET = "dsp-private-bucket";
 
     public static void main(String[] args) {
 
@@ -28,33 +29,29 @@ public class LocalApplication {
         int numOfPdfPerWorker = Integer.parseInt(args[1]);
         String terMessage = args[2];
         String inputFileKey = "inputFile" + localAppId;
-        String bucket = "dsp-private-bucket" + System.currentTimeMillis();
         Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
         String ec2NameManager = "Manager";
 
 
         // ---- Upload input file to s3 ----
-        S3Utils.uploadFile(input_file_path, inputFileKey, bucket);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
-
-
         String LocalManagerQName = "Local_Manager_Queue";
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
         BuildQueueIfNotExists(LocalManagerQName, sqs);                             // Creat Q
         String localManagerQUrl = getQUrl(LocalManagerQName, sqs);
-        String fileUrl = getFileUrl(bucket, inputFileKey);
+        String fileUrl = getFileUrl(PRIVATE_BUCKET, inputFileKey);
         putMessageInSqs(sqs, localManagerQUrl, fileUrl);
-
 
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance
-
-
-        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
+        Ec2Client ec2 = Ec2Client.builder()
+                .region(Region.US_EAST_1)
+                .build();
         if (!isManagerRunning(ec2)) {
             System.out.println("There is no manager running.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
@@ -113,7 +110,6 @@ public class LocalApplication {
 
         System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
         deleteLocalAppQueues(localAppId, sqs);
-
         // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
     }
@@ -223,20 +219,22 @@ public class LocalApplication {
      */
 
     private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) throws IOException {
-        String bucketName = "managercode" + System.currentTimeMillis(); //dsp-private-bucket
+        String bucketName = PRIVATE_BUCKET;
         String fileKey = "managerapp";
         S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
                 fileKey, bucketName);
 
         String cred = new String(Files.readAllBytes(Paths.get("/Users/eman/IdeaProjects/DSP-Assignment1/Manager/src/main/resources/credentials")));
-        String mkdir = "mkdir /home/.aws/\n";
-        String createCredentials = "echo \"" + cred + "\" > /home/.aws/credentials";
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\n" + mkdir + createCredentials + "\nwget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
                 "java -jar /home/ec2-user/manager.jar\n";
         System.out.println("user data: " + script);
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
+                .iamInstanceProfile(IamInstanceProfileSpecification.builder()
+                        .arn("arn:aws:iam::882762034269:instance-profile/role1")
+                        .build())
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(1)
                 .minCount(1)
