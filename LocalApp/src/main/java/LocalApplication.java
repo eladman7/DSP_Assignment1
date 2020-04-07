@@ -1,7 +1,5 @@
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
@@ -10,10 +8,6 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,47 +23,34 @@ public class LocalApplication {
         int numOfPdfPerWorker = Integer.parseInt(args[1]);
         String terMessage = args[2];
         String inputFileKey = "inputFile" + localAppId;
-        String bucket = "dsp-private-bucket";
         Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
-        String ec2NameManager = "Manager";
-
 
         // ---- Upload input file to s3 ----
-        S3Utils.uploadFile(input_file_path, inputFileKey, bucket);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
-
-
         String LocalManagerQName = "Local_Manager_Queue";
         SqsClient sqs = SqsClient.builder().region(region).build(); // Build Sqs client
         BuildQueueIfNotExists(LocalManagerQName, sqs);                             // Creat Q
         String localManagerQUrl = getQUrl(LocalManagerQName, sqs);
-        String fileUrl = getFileUrl(bucket, inputFileKey);
+        String fileUrl = getFileUrl(PRIVATE_BUCKET, inputFileKey);
         putMessageInSqs(sqs, localManagerQUrl, fileUrl);
-
 
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance
-
-
-        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
-        if (!isManagerRunning(ec2)) {
+        if (!EC2Utils.isManagerRunning()) {
             System.out.println("There is no manager running.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
-            try {
-                createEc2Instance(ec2, amiId, ec2NameManager);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            String managerScript = createManagerUserData(numOfPdfPerWorker);
+            EC2Utils.createEc2Instance(amiId, "Manager", managerScript, 1);
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
 
         // ---- Read SQS summary message from manager
-
         String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
         BuildQueueIfNotExists(ManagerLocalQName, sqs);
         String managerLocalQUrl = getQUrl(ManagerLocalQName, sqs);
@@ -114,9 +95,22 @@ public class LocalApplication {
 
         System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
         deleteLocalAppQueues(localAppId, sqs);
-
         // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
+    }
+
+    private static String createManagerUserData(int numOfPdfPerWorker) {
+        String bucketName = PRIVATE_BUCKET;
+        String fileKey = "managerapp";
+        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
+                fileKey, bucketName);
+
+        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
+                "java -jar /home/ec2-user/manager.jar " + numOfPdfPerWorker + "\n";
+        System.out.println("user data: " + script);
+        return script;
     }
 
     private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {
@@ -185,85 +179,6 @@ public class LocalApplication {
             return matcher.group(2);
         }
         return " ";
-    }
-
-    /**
-     * @param ec2
-     * @return true iff the manager running
-     */
-    public static boolean isManagerRunning(Ec2Client ec2) {
-        String nextToken = null;
-        do {
-//                     DescribeInstancesRequest request = DescribeInstancesRequest.builder().maxResults(6).nextToken(nextToken).build();
-            DescribeInstancesRequest request = DescribeInstancesRequest.builder().nextToken(nextToken).build();
-            DescribeInstancesResponse response = ec2.describeInstances(request);
-
-            for (Reservation reservation : response.reservations()) {
-                for (Instance instance : reservation.instances()) {
-                    List<Tag> tagList = instance.tags();
-                    for (Tag tag : tagList) {
-                        if (tag.value().equals("manager") &&
-                                (instance.state().name().toString().equals("running") ||
-                                        instance.state().name().toString().equals("pending")))
-                            return true;
-                    }
-                }
-            }
-            nextToken = response.nextToken();
-        } while (nextToken != null);
-
-        return false;
-    }
-
-    /**
-     * create an Ec2 instance
-     *
-     * @param ec2
-     * @param amiId
-     * @param ec2Name
-     */
-
-    private static void createEc2Instance(Ec2Client ec2, String amiId, String ec2Name) throws IOException {
-        String bucketName = PRIVATE_BUCKET;
-        String fileKey = "managerapp";
-        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
-                fileKey, bucketName);
-
-        String cred = new String(Files.readAllBytes(Paths.get("/Users/eman/IdeaProjects/DSP-Assignment1/Manager/src/main/resources/credentials")));
-        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\n"
-                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
-                "java -jar /home/ec2-user/manager.jar\n";
-        System.out.println("user data: " + script);
-        RunInstancesRequest runRequest = RunInstancesRequest.builder()
-                .imageId(amiId)
-                .iamInstanceProfile(IamInstanceProfileSpecification.builder()
-                        .arn("arn:aws:iam::882762034269:instance-profile/role1")
-                        .build())
-                .instanceType(InstanceType.T2_MICRO)
-                .maxCount(1)
-                .minCount(1)
-                .userData(Base64.getEncoder().encodeToString(script.getBytes()))
-                .keyName("eladkey")
-                .build();
-        RunInstancesResponse response = ec2.runInstances(runRequest);
-        String instanceId = response.instances().get(0).instanceId();
-        Tag tag = Tag.builder()
-                .key("name")
-                .value(ec2Name)
-                .build();
-        CreateTagsRequest tagRequest = CreateTagsRequest.builder()
-                .resources(instanceId)
-                .tags(tag)
-                .build();
-        try {
-            ec2.createTags(tagRequest);
-            System.out.println(
-                    "Successfully started EC2 instance: " + instanceId + "based on AMI: " + amiId);
-        } catch (Ec2Exception e) {
-            System.err.println(e.getMessage());
-            System.exit(1);
-        }
     }
 
     /**

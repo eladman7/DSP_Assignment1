@@ -1,16 +1,11 @@
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.Tag;
-import software.amazon.awssdk.services.ec2.model.*;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
-import java.io.*;
-import java.nio.file.Paths;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -30,47 +25,33 @@ public class ManagerRunner implements Runnable {
         this.numOfMsgForWorker = numOfMsgForWorker;
         this.inputMessage = inputMessage;
         this.workerOutputQName = workerOutputQ + id;
-
     }
 
 
     @Override
     public void run() {
-
-        S3Client s3;
-        Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
-        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
-        s3 = S3Client.builder().region(region).build();
-        SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
-
+        SqsClient sqsClient = SqsClient.builder().region(Region.US_EAST_1).build(); // Build Sqs client
 
         String inputBucket = extractBucket(inputMessage);
         String inputKey = extractKey(inputMessage);
 
         //download input file, Save under "inputFile.txt"
-
         try {
-            s3.getObject(GetObjectRequest.builder().bucket(inputBucket).key(inputKey).build(),
-                    ResponseTransformer.toFile(Paths.get("inputFile" + id + ".txt")));
-        } catch (Exception ignored) {}
-        finally {
-
-
+            S3Utils.getObjectToLocal(inputKey, inputBucket, "inputFile" + id + ".txt");
+        } catch (Exception ignored) {
+        } finally {
 
             // Create SQS message for each url in the input file.
-
             List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
             int messageCount = tasks.size();
             System.out.println("numOfMessages: " + messageCount);
 
-            int numOfRunningWorkers = numOfRunningWorkers(ec2);
-            int numOfWorkers = 0;
-
+            int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
+            int numOfWorkers;
             if (numOfRunningWorkers == 0) {
                 numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
             } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
-
 
             String tasksQUrl;
             // Build Tasks Q name
@@ -83,7 +64,7 @@ public class ManagerRunner implements Runnable {
             System.out.println("build Workers outputQ succeed");
 
 
-            createWorkers(numOfWorkers, ec2, amiId);
+            createWorkers(numOfWorkers, amiId);
             System.out.println("create workers succeed");
 
             // Delegate Tasks to workers.
@@ -95,16 +76,11 @@ public class ManagerRunner implements Runnable {
                     "(it sounds like a good time to lunch them!)");
 
 //            runWorkers with the inputs: TasksQName, this.workerOutputQ
-
-
-
 //            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "Manager_Local_Queue" + id);
             System.out.println("Start making summary file.. ");
-            makeAndUploadSummaryFile(sqsClient, s3, messageCount, workerOutputQName);
+            makeAndUploadSummaryFile(sqsClient, messageCount, workerOutputQName);
 
             System.out.println("finish make and upload summary file, exit ManagerRunner");
-
-
 
 
         }
@@ -117,19 +93,15 @@ public class ManagerRunner implements Runnable {
      * Make summary file from all workers results and upload to s3 bucket, named "summaryfilebucket"
      * so in order to make this work there is bucket with this name before the function run
      * @param sqs
-     * @param s3
      * @param numOfMessages
      * @param tasksResultQName
      */
-
-
-    private static void makeAndUploadSummaryFile(SqsClient sqs,
-                                                 S3Client s3, int numOfMessages, String tasksResultQName) {
+    private void makeAndUploadSummaryFile(SqsClient sqs, int numOfMessages, String tasksResultQName) {
         int leftToRead = numOfMessages;
         FileWriter summaryFile = null;
         try {
             summaryFile = new FileWriter("summaryFile" + id + ".html");
-        }   catch (Exception ex) {
+        } catch (Exception ex) {
             System.out.println(ex.getMessage());
         }
         String qUrl = getQUrl(tasksResultQName, sqs);
@@ -143,7 +115,7 @@ public class ManagerRunner implements Runnable {
                     summaryFile.write(message.body() + '\n');
                     deleteMessageFromQ(message, sqs, qUrl);
                     leftToRead--;
-                }catch (IOException ex) {
+                } catch (IOException ex) {
                     System.out.println(ex.toString());
                 }
 
@@ -156,8 +128,7 @@ public class ManagerRunner implements Runnable {
             System.out.println(ex.toString());
         }
         System.out.println("finish making summaryFile.. start uploading summary file..");
-        uploadFile(new File("summaryFile" + id + ".html"), s3,
-                "dsp-private-bucket", "summaryFile");
+        S3Utils.uploadFile("summaryFile" + id + ".html", "summaryFile", "dsp-private-bucket");
 
         System.out.println("finish uploading file..put message in sqs ");
         putMessageInSqs(sqs, getQUrl("Manager_Local_Queue" + id, sqs),
@@ -166,35 +137,6 @@ public class ManagerRunner implements Runnable {
 
 
     /**
-     * Upload first file to S3
-     * @param file
-     * @param s3
-     * @param bucket
-     * @param key
-     */
-
-    private static void uploadFile(File file, S3Client s3, String bucket, String key) {
-
-        try {
-            s3.createBucket(CreateBucketRequest
-                    .builder()
-                    .bucket(bucket)
-                    .createBucketConfiguration(
-                            CreateBucketConfiguration.builder()
-                                    .build())
-                    .build());
-        }
-        catch(BucketAlreadyExistsException ignored) {}
-
-
-        s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
-                RequestBody.fromFile(file));
-    }
-
-
-
-    /**
-     *
      * @param sqsClient
      * @param qName
      * @return Build sqs with the name qName, if not already exists.
@@ -218,7 +160,7 @@ public class ManagerRunner implements Runnable {
      * @param sqs
      */
 
-    private static void createQByName(String QUEUE_NAME, SqsClient sqs) {
+    private void createQByName(String QUEUE_NAME, SqsClient sqs) {
         try {
             CreateQueueRequest request = CreateQueueRequest.builder()
                     .queueName(QUEUE_NAME)
@@ -236,7 +178,7 @@ public class ManagerRunner implements Runnable {
      * @param queueUrl
      * @param message
      */
-    private static void putMessageInSqs(SqsClient sqs, String queueUrl, String message) {
+    private void putMessageInSqs(SqsClient sqs, String queueUrl, String message) {
         SendMessageRequest send_msg_request = SendMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .messageBody(message)
@@ -244,76 +186,32 @@ public class ManagerRunner implements Runnable {
                 .build();
         sqs.sendMessage(send_msg_request);
     }
+
     /**
      * This function create numOfWorker Ec2-workers.
      * @param numOfWorkers
-     * @param ec2
      * @param amiId
      */
-    public static void createWorkers (int numOfWorkers, Ec2Client ec2, String amiId) {
-            RunInstancesRequest runRequest = RunInstancesRequest.builder()
-                    .imageId(amiId)
-                    .instanceType(InstanceType.T2_MICRO)
-                    .maxCount(numOfWorkers)
-                    .minCount(numOfWorkers)
-                    .build();
-
-            RunInstancesResponse response = ec2.runInstances(runRequest);
-
-        for (int index = 0; index < numOfWorkers; index++) {
-
-            String instanceId = response.instances().get(index).instanceId();
-
-            Tag tag = Tag.builder()
-                    .key("name")
-                    .value("WorkerNumber " + index)
-                    .build();
-
-            CreateTagsRequest tagRequest = CreateTagsRequest.builder()
-                    .resources(instanceId)
-                    .tags(tag)
-                    .build();
-
-            try {
-                ec2.createTags(tagRequest);
-                System.out.println(
-                        "Successfully started EC2 instance: " + instanceId + "based on AMI: " + amiId);
-
-            } catch (Ec2Exception e) {
-                System.err.println("error while tagging an instance.. trying again");
-                index--;
-            }
+    public void createWorkers(int numOfWorkers, String amiId) {
+        String[] instancesNames = new String[numOfWorkers];
+        for (int i = 0; i < numOfWorkers; i++){
+            instancesNames[i] = "WorkerNumber" + i;
         }
+        EC2Utils.createEc2Instance(amiId, instancesNames, createWorkerUserData(), numOfWorkers);
     }
 
+    private String createWorkerUserData() {
+        String bucketName = "dsp-private-bucket";
+        String fileKey = "workerapp";
+        S3Utils.uploadFile("out/artifacts/Worker_jar/Worker.jar",
+                fileKey, bucketName);
 
-    /**
-     * @param ec2
-     * @return the number of currently running client
-     */
-
-    public static int numOfRunningWorkers(Ec2Client ec2) {
-        String nextToken = null;
-        int counter = 0;
-        do {
-            DescribeInstancesRequest request = DescribeInstancesRequest.builder().nextToken(nextToken).build();
-            DescribeInstancesResponse response = ec2.describeInstances(request);
-
-            for (Reservation reservation : response.reservations()) {
-                for (Instance instance : reservation.instances()) {
-                    List<Tag> tagList = instance.tags();
-                    for (Tag tag : tagList) {
-                        if (!tag.value().equals("Manager") &&
-                                (instance.state().name().toString().equals("running") ||
-                                        instance.state().name().toString().equals("pending")))
-                            counter++;
-                    }
-                }
-            }
-            nextToken = response.nextToken();
-        } while (nextToken != null);
-
-        return counter;
+        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
+                "java -jar /home/ec2-user/worker.jar " + this.TasksQName + this.workerOutputQName + "\n";
+        System.out.println("user data: " + script);
+        return script;
     }
 
 
@@ -322,7 +220,7 @@ public class ManagerRunner implements Runnable {
      * @param sqs
      * @return this function return the Q url by its name.
      */
-    private static String getQUrl(String QUEUE_NAME, SqsClient sqs) {
+    private String getQUrl(String QUEUE_NAME, SqsClient sqs) {
         GetQueueUrlRequest getQueueRequest = GetQueueUrlRequest.builder()
                 .queueName(QUEUE_NAME)
                 .build();
@@ -334,7 +232,7 @@ public class ManagerRunner implements Runnable {
      * @param body
      * @return the bucket name from a sqs message
      */
-    public static String extractBucket(String body) {
+    public String extractBucket(String body) {
         Pattern pattern = Pattern.compile("//(.*?)/((.+?)*)");
         Matcher matcher = pattern.matcher(body);
         if (matcher.find()) {
@@ -347,7 +245,7 @@ public class ManagerRunner implements Runnable {
      * @param body
      * @return the key from a sqs message
      */
-    public static String extractKey(String body) {
+    public String extractKey(String body) {
         Pattern pattern = Pattern.compile("//(.*?)/((.+?)*)");
         Matcher matcher = pattern.matcher(body);
         if (matcher.find()) {
@@ -361,7 +259,7 @@ public class ManagerRunner implements Runnable {
      * @param filename
      * @return List of all the messages from the pdf file, which we get by sqs.
      */
-    public static List<String> createSqsMessages(String filename) {
+    public List<String> createSqsMessages(String filename) {
         List<String> tasks = new LinkedList<>();
         BufferedReader reader;
         String line;
@@ -380,14 +278,15 @@ public class ManagerRunner implements Runnable {
     }
 
 
-    private static void deleteMessageFromQ(Message message, SqsClient sqsClient, String localManagerUrl) {
+    private void deleteMessageFromQ(Message message, SqsClient sqsClient, String localManagerUrl) {
         DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
                 .queueUrl(localManagerUrl)
                 .receiptHandle(message.receiptHandle())
                 .build();
         sqsClient.deleteMessage(deleteRequest);
     }
-    private static String getFileUrl (String bucket, String key) {
+
+    private String getFileUrl(String bucket, String key) {
         return "s3://" + bucket + "/" + key;
     }
 

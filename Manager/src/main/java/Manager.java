@@ -1,6 +1,4 @@
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
@@ -20,16 +18,10 @@ public class Manager {
     public static void main(String[] args) {
 
         // Currently assuming there is only one LocalApplication.
-
-        Region region = Region.US_EAST_1;
-        List<Message> messages;
-        Message inputMessage;
         final String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
-//        int numOfMsgForWorker = Integer.parseInt(args[0]);
-        int numOfMsgForWorker = 1;                          // Save number of msg for each worker
-        SqsClient sqsClient = SqsClient.builder().region(region).build(); // Build Sqs client
-        Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
-
+        int numOfMsgForWorker = Integer.parseInt(args[0]);// Save number of msg for each worker
+        System.out.println("manager: setting num of messages per worker to: " + numOfMsgForWorker);
+        SqsClient sqsClient = SqsClient.builder().region(Region.US_EAST_1).build(); // Build Sqs client
 
         String localManagerUrl = getQUrl(sqsName, sqsClient);
         ReceiveMessageRequest rRLocalManager;
@@ -37,9 +29,7 @@ public class Manager {
         ExecutorService executor = Executors.newCachedThreadPool();
         ThreadPoolExecutor pool = (ThreadPoolExecutor) executor;
 
-
         // Connect to the Queue
-
         while (true) {
             try {
                 rRLocalManager = ReceiveMessageRequest.builder()
@@ -50,10 +40,10 @@ public class Manager {
             }
         }
 
-
         // Read message from Local
         // Busy Wait until terminate message
-
+        List<Message> messages;
+        Message inputMessage;
         while (true) {
             try {
                 messages = sqsClient.receiveMessage(rRLocalManager).messages();
@@ -69,7 +59,7 @@ public class Manager {
                     waitExecutorToFinish(executor);
                     System.out.println("terminating ec2 instances.. ");
 
-                    terminateEc2Instances(ec2);
+                    EC2Utils.terminateEc2Instances();
                     System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
 
                     break;
@@ -85,29 +75,6 @@ public class Manager {
         }
 
     }
-
-    /**
-     * Terminate all running ec2 instances
-     * @param ec2
-     */
-
-    private static void terminateEc2Instances(Ec2Client ec2) {
-        String nextToken = null;
-        do {
-            DescribeInstancesRequest dRequest = DescribeInstancesRequest.builder().nextToken(nextToken).build();
-            DescribeInstancesResponse response = ec2.describeInstances(dRequest);
-            for (Reservation reservation : response.reservations()) {
-                for (Instance instance : reservation.instances()) {
-                    TerminateInstancesRequest request = TerminateInstancesRequest.builder().instanceIds(instance.instanceId()).build();
-                    ec2.terminateInstances(request);
-                }
-            }
-            nextToken = response.nextToken();
-        } while (nextToken != null);
-    }
-
-
-
 
     /**
      * Waiting for some LocalApp < --- > Manager connection to finish.
@@ -135,7 +102,6 @@ public class Manager {
                 .build();
         sqsClient.deleteMessage(deleteRequest);
     }
-
 
 
     /**
