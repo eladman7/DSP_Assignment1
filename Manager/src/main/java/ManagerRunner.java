@@ -209,7 +209,7 @@ public class ManagerRunner implements Runnable {
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
                 + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
-                "java -jar /home/ec2-user/worker.jar " + this.TasksQName + this.workerOutputQName + "\n";
+                "java -jar /home/ec2-user/worker.jar " + this.TasksQName + " " + this.workerOutputQName + "\n";
         System.out.println("user data: " + script);
         return script;
     }
