@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 
 public class LocalApplication {
 
-    private static final String PRIVATE_BUCKET = "dsp-private-bucket";
+    private static final String PRIVATE_BUCKET = "distributed-system-programming-private-bucket";
 
     public static void main(String[] args) {
 
@@ -27,7 +27,7 @@ public class LocalApplication {
         String amiId = "ami-076515f20540e6e0b";
 
         // ---- Upload input file to s3 ----
-        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET, true);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
@@ -100,17 +100,18 @@ public class LocalApplication {
     }
 
     private static String createManagerUserData(int numOfPdfPerWorker) {
-        String bucketName = PRIVATE_BUCKET;
-        String fileKey = "managerapp";
-        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
-                fileKey, bucketName);
-
-        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\n"
-                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
-                "java -jar /home/ec2-user/manager.jar " + numOfPdfPerWorker + "\n";
-        System.out.println("user data: " + script);
-        return script;
+//        String bucketName = PRIVATE_BUCKET;
+//        String fileKey = "managerapp";
+//        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
+//                fileKey, bucketName, true);
+//
+//        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+//        String script = "#!/bin/bash\n"
+//                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
+//                "java -jar /home/ec2-user/manager.jar " + numOfPdfPerWorker + "\n";
+//        System.out.println("user data: " + script);
+//        return script;
+        return "";
     }
 
     private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {

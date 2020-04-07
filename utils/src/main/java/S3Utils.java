@@ -16,20 +16,20 @@ public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
 
-    public static String uploadFile(String fileLocalPath, String fileKey) {
-        String bucketName = "dsp-public-bucket";
-        uploadFile(fileLocalPath, fileKey, bucketName);
+    public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
+        String bucketName = "distributed-system-programming-public-bucket";
+        uploadFile(fileLocalPath, fileKey, bucketName, isPrivate);
         return bucketName;
     }
 
-    public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName) {
+    public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
         File input_file = new File(fileLocalPath);
-        uploadInputFile(input_file, bucketName, fileKey);
+        uploadInputFile(input_file, bucketName, fileKey, isPrivate);
         return true;
     }
 
-    public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName) {
-        multipartUpload(fileLocalPath, fileKey, bucketName);
+    public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
+        multipartUpload(fileLocalPath, fileKey, bucketName, isPrivate);
         return true;
     }
 
@@ -45,15 +45,22 @@ public class S3Utils {
      * @param bucket
      * @param key
      */
-    private static void uploadInputFile(File input_file, String bucket, String key) {
+    private static void uploadInputFile(File input_file, String bucket, String key, boolean isPrivate) {
        try {
-           createBucket(bucket);
-       } catch (BucketAlreadyExistsException ignored) {}
+           createBucket(bucket, isPrivate);
+       } catch (BucketAlreadyExistsException ignored) {
+           System.out.println(ignored.getMessage());
+       }
+       if (!isPrivate)
         s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
                 RequestBody.fromFile(input_file));
+       else
+           s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+                   RequestBody.fromFile(input_file));
     }
 
-    private static void createBucket(String bucket) {
+    private static void createBucket(String bucket, boolean isPrivate) {
+        if (!isPrivate)
         s3.createBucket(CreateBucketRequest
                 .builder()
                 .acl(BucketCannedACL.PUBLIC_READ_WRITE)
@@ -62,10 +69,19 @@ public class S3Utils {
                         CreateBucketConfiguration.builder()
                                 .build())
                 .build());
+        else
+            s3.createBucket(CreateBucketRequest
+                    .builder()
+                    .bucket(bucket)
+                    .createBucketConfiguration(
+                            CreateBucketConfiguration.builder()
+                                    .build())
+                    .build());
+
     }
 
-    private static void multipartUpload(String filePath, String keyName, String bucketName) {
-        createBucket(bucketName);
+    private static void multipartUpload(String filePath, String keyName, String bucketName, boolean isPrivate) {
+        createBucket(bucketName, isPrivate);
         File file = new File(filePath);
         long contentLength = file.length();
         long partSize = 5 * 1024 * 1024; // Set part size to 5 MB.
@@ -75,13 +91,19 @@ public class S3Utils {
             // then, after each individual part has been uploaded, pass the list of ETags to
             // the request to complete the upload.
             List<CompletedPart> completedParts = new ArrayList<>();
-
+            CreateMultipartUploadRequest createMultipartUploadRequest;
             // Initiate the multipart upload.
-            CreateMultipartUploadRequest createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+            if (!isPrivate)
+                createMultipartUploadRequest= CreateMultipartUploadRequest.builder()
                     .bucket(bucketName)
                     .key(keyName)
                     .acl(ObjectCannedACL.PUBLIC_READ_WRITE)
                     .build();
+            else
+                 createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+                        .bucket(bucketName)
+                        .key(keyName)
+                        .build();
             CreateMultipartUploadResponse response = s3.createMultipartUpload(createMultipartUploadRequest);
             String uploadId = response.uploadId();
             System.out.println(uploadId);

@@ -25,13 +25,13 @@ public class EC2Utils {
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .iamInstanceProfile(IamInstanceProfileSpecification.builder()
-                        .arn("arn:aws:iam::882762034269:instance-profile/role1")
+                        .arn("arn:aws:iam::110380217222:instance-profile/Role1")
                         .build())
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(instancesCount)
                 .minCount(instancesCount)
                 .userData(Base64.getEncoder().encodeToString(userDataScript.getBytes()))
-                .keyName("eladkey")
+                .keyName("barkey")
                 .build();
         RunInstancesResponse response = ec2.runInstances(runRequest);
         for (int i = 0; i < instancesCount; i++) {
@@ -70,7 +70,7 @@ public class EC2Utils {
                 for (Instance instance : reservation.instances()) {
                     List<Tag> tagList = instance.tags();
                     for (Tag tag : tagList) {
-                        if (tag.value().equals("manager") &&
+                        if (tag.value().equals("Manager") &&
                                 (instance.state().name().toString().equals("running") ||
                                         instance.state().name().toString().equals("pending")))
                             return true;

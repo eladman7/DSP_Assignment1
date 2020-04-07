@@ -63,10 +63,6 @@ public class ManagerRunner implements Runnable {
             BuildQueueIfNotExists(sqsClient, workerOutputQName);
             System.out.println("build Workers outputQ succeed");
 
-
-            createWorkers(numOfWorkers, amiId);
-            System.out.println("create workers succeed");
-
             // Delegate Tasks to workers.
             for (String task : tasks) {
                 putMessageInSqs(sqsClient, tasksQUrl, task);
@@ -74,6 +70,11 @@ public class ManagerRunner implements Runnable {
 
             System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
                     "(it sounds like a good time to lunch them!)");
+
+            createWorkers(numOfWorkers, amiId);
+            System.out.println("create workers succeed");
+
+
 
 //            runWorkers with the inputs: TasksQName, this.workerOutputQ
 //            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "Manager_Local_Queue" + id);
@@ -128,11 +129,12 @@ public class ManagerRunner implements Runnable {
             System.out.println(ex.toString());
         }
         System.out.println("finish making summaryFile.. start uploading summary file..");
-        S3Utils.uploadFile("summaryFile" + id + ".html", "summaryFile", "dsp-private-bucket");
+        S3Utils.uploadFile("summaryFile" + id + ".html",
+                "summaryFile", "distributed-system-programming-private-bucket", true);
 
         System.out.println("finish uploading file..put message in sqs ");
         putMessageInSqs(sqs, getQUrl("Manager_Local_Queue" + id, sqs),
-                getFileUrl("dsp-private-bucket", "summaryFile"));
+                getFileUrl("distributed-system-programming-private-bucket", "summaryFile"));
     }
 
 
@@ -201,10 +203,15 @@ public class ManagerRunner implements Runnable {
     }
 
     private String createWorkerUserData() {
-        String bucketName = "dsp-private-bucket";
+        String bucketName = "distributed-system-programming-private-bucket";
         String fileKey = "workerapp";
-        S3Utils.uploadFile("out/artifacts/Worker_jar/Worker.jar",
-                fileKey, bucketName);
+        try {
+            S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
+                    fileKey, bucketName, true);
+        } catch (Exception ex) {
+            System.out.println(
+                    "in ManagerRunner.createWorkerUserData: "+ex.getMessage());
+        }
 
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"

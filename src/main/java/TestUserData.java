@@ -11,7 +11,7 @@ public class TestUserData {
         Ec2Client ec2 = Ec2Client.builder().region(Region.US_EAST_1).build();
         String bucketName = "managercode";
         String fileKey = "managerapp";
-        S3Utils.uploadFile("/Users/eman/IdeaProjects/DSP-Assignment1/out/artifacts/Assignment1_jar/Assignment1.jar", fileKey, bucketName);
+//        S3Utils.uploadFile("/Users/eman/IdeaProjects/DSP-Assignment1/out/artifacts/Assignment1_jar/Assignment1.jar", fileKey, bucketName);
         //        https://<bucket-name>.s3.amazonaws.com/<key>   - remote output url
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
 

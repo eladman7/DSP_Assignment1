@@ -37,7 +37,7 @@ public class Worker {
         try {
             outFilePath = processOperation(operationName, pdfS3PathToProcess);
             String fileKey = "output" + String.valueOf(System.currentTimeMillis());
-            String bucket = S3Utils.uploadFile(outFilePath, fileKey);
+            String bucket = S3Utils.uploadFile(outFilePath, fileKey, false);
             String remoteOutputURL = "https://" + bucket + ".s3.amazonaws.com/" + fileKey;
             SQSUtils.sendMSG(outputQName, buildCompletedMessage(operationName, pdfS3PathToProcess, remoteOutputURL));
         } catch (Exception e) {
