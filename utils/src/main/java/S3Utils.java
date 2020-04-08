@@ -16,20 +16,21 @@ public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
 
+    // TODO: 08/04/2020 change isPrivate.
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
         String bucketName = "distributed-system-programming-public-bucket";
-        uploadFile(fileLocalPath, fileKey, bucketName, isPrivate);
+        uploadFile(fileLocalPath, fileKey, bucketName, false);
         return bucketName;
     }
 
     public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
         File input_file = new File(fileLocalPath);
-        uploadInputFile(input_file, bucketName, fileKey, isPrivate);
+        uploadInputFile(input_file, bucketName, fileKey, false);
         return true;
     }
 
     public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
-        multipartUpload(fileLocalPath, fileKey, bucketName, isPrivate);
+        multipartUpload(fileLocalPath, fileKey, bucketName, false);
         return true;
     }
 
@@ -51,7 +52,8 @@ public class S3Utils {
        } catch (BucketAlreadyExistsException ignored) {
            System.out.println(ignored.getMessage());
        }
-       if (!isPrivate)
+//       if (!isPrivate)
+        if(true)
         s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
                 RequestBody.fromFile(input_file));
        else
@@ -60,7 +62,8 @@ public class S3Utils {
     }
 
     private static void createBucket(String bucket, boolean isPrivate) {
-        if (!isPrivate)
+        if(true)
+//        if (!isPrivate)
         s3.createBucket(CreateBucketRequest
                 .builder()
                 .acl(BucketCannedACL.PUBLIC_READ_WRITE)

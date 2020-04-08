@@ -25,13 +25,13 @@ public class EC2Utils {
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .iamInstanceProfile(IamInstanceProfileSpecification.builder()
-                        .arn("arn:aws:iam::110380217222:instance-profile/Role1")
+                        .arn("arn:aws:iam::110380217222:instance-profile/assignment1")
                         .build())
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(instancesCount)
                 .minCount(instancesCount)
                 .userData(Base64.getEncoder().encodeToString(userDataScript.getBytes()))
-                .keyName("barkey")
+                .keyName("key1")
                 .build();
         RunInstancesResponse response = ec2.runInstances(runRequest);
         for (int i = 0; i < instancesCount; i++) {

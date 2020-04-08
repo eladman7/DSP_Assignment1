@@ -27,7 +27,7 @@ public class LocalApplication {
         String amiId = "ami-076515f20540e6e0b";
 
         // ---- Upload input file to s3 ----
-        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET, true);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET, false);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
@@ -42,7 +42,7 @@ public class LocalApplication {
 
         // ---- Create Manager Instance
         if (!EC2Utils.isManagerRunning()) {
-            System.out.println("There is no manager running.. lunch manager");
+            System.out.println("There is no running manager.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
             String managerScript = createManagerUserData(numOfPdfPerWorker);
             EC2Utils.createEc2Instance(amiId, "Manager", managerScript, 1);
@@ -99,19 +99,27 @@ public class LocalApplication {
 
     }
 
+    // TODO: 07/04/2020 connect num of msg per worker to here
     private static String createManagerUserData(int numOfPdfPerWorker) {
-//        String bucketName = PRIVATE_BUCKET;
-//        String fileKey = "managerapp";
-//        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
-//                fileKey, bucketName, true);
-//
-//        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-//        String script = "#!/bin/bash\n"
-//                + "wget " + s3Path + " -O /home/ec2-user/manager.jar\n" +
-//                "java -jar /home/ec2-user/manager.jar " + numOfPdfPerWorker + "\n";
-//        System.out.println("user data: " + script);
-//        return script;
-        return "";
+        String bucketName = PRIVATE_BUCKET;
+        String fileKey = "managerapp";
+        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
+                fileKey, bucketName, false);
+
+        try {
+            S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
+                    "workerapp", bucketName, false);
+        } catch (Exception ex) {
+            System.out.println(
+                    "in LocalApplication.createManagerUserData: "+ex.getMessage());
+        }
+
+        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/Manager.jar\n" +
+                "java -jar /home/ec2-user/Manager.jar " + numOfPdfPerWorker + "\n";
+        System.out.println("user data: " + script);
+        return script;
     }
 
     private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {

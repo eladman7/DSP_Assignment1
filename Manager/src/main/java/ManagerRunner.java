@@ -205,13 +205,13 @@ public class ManagerRunner implements Runnable {
     private String createWorkerUserData() {
         String bucketName = "distributed-system-programming-private-bucket";
         String fileKey = "workerapp";
-        try {
-            S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
-                    fileKey, bucketName, true);
-        } catch (Exception ex) {
-            System.out.println(
-                    "in ManagerRunner.createWorkerUserData: "+ex.getMessage());
-        }
+//        try {
+//            S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
+//                    fileKey, bucketName, true);
+//        } catch (Exception ex) {
+//            System.out.println(
+//                    "in ManagerRunner.createWorkerUserData: "+ex.getMessage());
+//        }
 
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
