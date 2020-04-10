@@ -20,22 +20,22 @@ public class S3Utils {
     // TODO: 09/04/2020 make public bucket once, only in the first local app
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
         String bucketName = "dsp-public-bucket";
-        uploadFile(fileLocalPath, fileKey, bucketName, false);
+        uploadFile(fileLocalPath, fileKey, bucketName, isPrivate);
         return bucketName;
     }
 
     public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
         File input_file = new File(fileLocalPath);
-        uploadInputFile(input_file, bucketName, fileKey, false);
+        uploadInputFile(input_file, bucketName, fileKey, isPrivate);
         return true;
     }
 
     public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
-        multipartUpload(fileLocalPath, fileKey, bucketName, false);
+        multipartUpload(fileLocalPath, fileKey, bucketName, isPrivate);
         return true;
     }
 
-    public static void getObjectToLocal(String fileKey, String bucket, String localFilePath){
+    public static void getObjectToLocal(String fileKey, String bucket, String localFilePath) {
         s3.getObject(GetObjectRequest.builder().bucket(bucket).key(fileKey).build(),
                 ResponseTransformer.toFile(Paths.get(localFilePath)));
     }
@@ -48,40 +48,37 @@ public class S3Utils {
      * @param key
      */
     private static void uploadInputFile(File input_file, String bucket, String key, boolean isPrivate) {
-       try {
-           createBucket(bucket, isPrivate);
-       } catch (BucketAlreadyExistsException ignored) {
-           System.out.println(ignored.getMessage());
-       }
-//       if (!isPrivate)
-        if(true)
-        s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
-                RequestBody.fromFile(input_file));
-       else
-           s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
-                   RequestBody.fromFile(input_file));
+        try {
+            createBucket(bucket, isPrivate);
+        } catch (BucketAlreadyExistsException ignored) {
+            System.out.println("bucket with name: " + bucket + " already exists!");
+        }
+        if (!isPrivate)
+            s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
+                    RequestBody.fromFile(input_file));
+        else
+            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+                    RequestBody.fromFile(input_file));
     }
 
-    private static void createBucket(String bucket, boolean isPrivate) {
-        if(true)
-//        if (!isPrivate)
-        s3.createBucket(CreateBucketRequest
-                .builder()
-                .acl(BucketCannedACL.PUBLIC_READ_WRITE)
-                .bucket(bucket)
-                .createBucketConfiguration(
-                        CreateBucketConfiguration.builder()
-                                .build())
-                .build());
-        else
+    private static void createBucket(String bucketName, boolean isPrivate) {
+        if (!isPrivate) {
             s3.createBucket(CreateBucketRequest
                     .builder()
-                    .bucket(bucket)
+                    .acl(BucketCannedACL.PUBLIC_READ_WRITE)
+                    .bucket(bucketName)
                     .createBucketConfiguration(
                             CreateBucketConfiguration.builder()
                                     .build())
                     .build());
-
+        } else
+            s3.createBucket(CreateBucketRequest
+                    .builder()
+                    .bucket(bucketName)
+                    .createBucketConfiguration(
+                            CreateBucketConfiguration.builder()
+                                    .build())
+                    .build());
     }
 
     private static void multipartUpload(String filePath, String keyName, String bucketName, boolean isPrivate) {
@@ -98,13 +95,13 @@ public class S3Utils {
             CreateMultipartUploadRequest createMultipartUploadRequest;
             // Initiate the multipart upload.
             if (!isPrivate)
-                createMultipartUploadRequest= CreateMultipartUploadRequest.builder()
-                    .bucket(bucketName)
-                    .key(keyName)
-                    .acl(ObjectCannedACL.PUBLIC_READ_WRITE)
-                    .build();
+                createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+                        .bucket(bucketName)
+                        .key(keyName)
+                        .acl(ObjectCannedACL.PUBLIC_READ_WRITE)
+                        .build();
             else
-                 createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+                createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
                         .bucket(bucketName)
                         .key(keyName)
                         .build();

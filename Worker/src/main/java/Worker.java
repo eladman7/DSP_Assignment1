@@ -6,7 +6,8 @@ public class Worker {
 
     public static void main(String[] args) {
         String inputQName = args[0];
-        String outputQName = args[1];
+        String outputQNamePrefix = args[1];
+        String outputQName;
         while (true) {
             Message message = SQSUtils.recieveMSG(inputQName);
             if (message != null) {
@@ -14,9 +15,14 @@ public class Worker {
                     System.out.println("worker: shutting down... goodbye");
                     break;
                 }
+                outputQName = outputQNamePrefix + extractOutQName(message);
                 handleNewPDFTask(message, outputQName, inputQName);
             }
         }
+    }
+
+    private static String extractOutQName(Message message) {
+        return message.body().split("\\s+")[2];
     }
 
     /**
@@ -24,6 +30,7 @@ public class Worker {
      * upload output file to s3
      * send completed message to outputQName
      * delete handled message from inputQName
+     *
      * @param message
      * @param outputQName
      * @param inputQName
