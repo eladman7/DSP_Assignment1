@@ -17,8 +17,9 @@ public class S3Utils {
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
 
     // TODO: 08/04/2020 change isPrivate.
+    // TODO: 09/04/2020 make public bucket once, only in the first local app
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
-        String bucketName = "distributed-system-programming-public-bucket";
+        String bucketName = "dsp-public-bucket";
         uploadFile(fileLocalPath, fileKey, bucketName, false);
         return bucketName;
     }

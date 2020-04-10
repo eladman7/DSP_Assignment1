@@ -71,6 +71,7 @@ public class Manager {
 
                 }
             } catch (IndexOutOfBoundsException ignored) {
+                System.out.println(ignored);
             }
         }
 

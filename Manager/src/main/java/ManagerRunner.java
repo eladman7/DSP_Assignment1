@@ -12,16 +12,16 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ManagerRunner implements Runnable {
-    private String TasksQName;
-    private int numOfMsgForWorker;
-    private String inputMessage;
-    private String workerOutputQName;
+    private final String TasksQName;
+    private final int numOfMsgForWorker;
+    private final String inputMessage;
+    private final String workerOutputQName;
     private static String id;
 
 
     public ManagerRunner(String TasksQName, String workerOutputQ, int numOfMsgForWorker, String inputMessage, String id) {
         this.id = id;
-        this.TasksQName = TasksQName + id;
+        this.TasksQName = TasksQName;
         this.numOfMsgForWorker = numOfMsgForWorker;
         this.inputMessage = inputMessage;
         this.workerOutputQName = workerOutputQ + id;
@@ -47,7 +47,9 @@ public class ManagerRunner implements Runnable {
             int messageCount = tasks.size();
             System.out.println("numOfMessages: " + messageCount);
 
+            // TODO: 10/04/2020 add synchronization somehow
             int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
+
             int numOfWorkers;
             if (numOfRunningWorkers == 0) {
                 numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
@@ -55,6 +57,7 @@ public class ManagerRunner implements Runnable {
 
             String tasksQUrl;
             // Build Tasks Q name
+            // TODO: 10/04/2020 stop this stupid check after the first time.
             tasksQUrl = BuildQueueIfNotExists(sqsClient, TasksQName);
             System.out.println("build TasksQ succeed");
 
@@ -70,8 +73,14 @@ public class ManagerRunner implements Runnable {
 
             System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
                     "(it sounds like a good time to lunch them!)");
-
-            createWorkers(numOfWorkers, amiId);
+            //assert there are no more than 10 workers running.
+            if(numOfWorkers + numOfRunningWorkers < 10) {
+                createWorkers(numOfWorkers, amiId);
+            }
+            else {
+                System.out.println("tried to build more than 10 instances.. exit..");
+                return;
+            }
             System.out.println("create workers succeed");
 
 
@@ -128,13 +137,13 @@ public class ManagerRunner implements Runnable {
         } catch (Exception ex) {
             System.out.println(ex.toString());
         }
-        System.out.println("finish making summaryFile.. start uploading summary file..");
+        System.out.println("RunInstancesResponse responsefinish making summaryFile.. start uploading summary file..");
         S3Utils.uploadFile("summaryFile" + id + ".html",
-                "summaryFile", "distributed-system-programming-private-bucket", true);
+                "summaryFile", "dsp-private-bucket", true);
 
         System.out.println("finish uploading file..put message in sqs ");
         putMessageInSqs(sqs, getQUrl("Manager_Local_Queue" + id, sqs),
-                getFileUrl("distributed-system-programming-private-bucket", "summaryFile"));
+                getFileUrl("dsp-private-bucket", "summaryFile"));
     }
 
 
@@ -200,19 +209,13 @@ public class ManagerRunner implements Runnable {
             instancesNames[i] = "WorkerNumber" + i;
         }
         EC2Utils.createEc2Instance(amiId, instancesNames, createWorkerUserData(), numOfWorkers);
+//        EC2Utils.createEc2Instance(amiId, instancesNames, "", numOfWorkers);
+
     }
 
     private String createWorkerUserData() {
-        String bucketName = "distributed-system-programming-private-bucket";
+        String bucketName = "dsp-private-bucket";
         String fileKey = "workerapp";
-//        try {
-//            S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
-//                    fileKey, bucketName, true);
-//        } catch (Exception ex) {
-//            System.out.println(
-//                    "in ManagerRunner.createWorkerUserData: "+ex.getMessage());
-//        }
-
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
                 + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
@@ -220,7 +223,6 @@ public class ManagerRunner implements Runnable {
         System.out.println("user data: " + script);
         return script;
     }
-
 
     /**
      * @param QUEUE_NAME

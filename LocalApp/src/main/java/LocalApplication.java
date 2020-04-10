@@ -14,14 +14,16 @@ import java.util.regex.Pattern;
 
 public class LocalApplication {
 
-    private static final String PRIVATE_BUCKET = "distributed-system-programming-private-bucket";
+    private static final String PRIVATE_BUCKET = "dsp-private-bucket";
 
     public static void main(String[] args) {
 
         final String localAppId = String.valueOf(System.currentTimeMillis());
         String input_file_path = args[0];
         int numOfPdfPerWorker = Integer.parseInt(args[1]);
-        String terMessage = args[2];
+
+        String terMessage = checkForTerminateMessage(args);
+
         String inputFileKey = "inputFile" + localAppId;
         Region region = Region.US_EAST_1;
         String amiId = "ami-076515f20540e6e0b";
@@ -46,11 +48,14 @@ public class LocalApplication {
             // Run manager JarFile with input : numOfPdfPerWorker.
             String managerScript = createManagerUserData(numOfPdfPerWorker);
             EC2Utils.createEc2Instance(amiId, "Manager", managerScript, 1);
+//            EC2Utils.createEc2Instance(amiId, "Manager", "", 1);
+
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
 
         // ---- Read SQS summary message from manager
+        System.out.println("building manager < -- > local queue");
         String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
         BuildQueueIfNotExists(ManagerLocalQName, sqs);
         String managerLocalQUrl = getQUrl(ManagerLocalQName, sqs);
@@ -80,7 +85,6 @@ public class LocalApplication {
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
 
 
-        // TODO: 05/04/2020 check for the key
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
@@ -95,23 +99,37 @@ public class LocalApplication {
 
         System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
         deleteLocalAppQueues(localAppId, sqs);
-        // TODO: 05/04/2020 Add delete bucket and Queues which there are no used for them.
 
+    }
+
+    /**
+     * check if the user insert terminate message
+     * @param args
+     * @return
+     */
+
+    private static String checkForTerminateMessage(String[] args) {
+        String terMessage = "";
+        if (args.length > 2)
+            terMessage = args[2];
+        return terMessage;
     }
 
     // TODO: 07/04/2020 connect num of msg per worker to here
     private static String createManagerUserData(int numOfPdfPerWorker) {
         String bucketName = PRIVATE_BUCKET;
         String fileKey = "managerapp";
+        System.out.println("Uploading manager jar..");
         S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
                 fileKey, bucketName, false);
 
         try {
+            System.out.println("Uploading worker jar..");
             S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
                     "workerapp", bucketName, false);
         } catch (Exception ex) {
             System.out.println(
-                    "in LocalApplication.createManagerUserData: "+ex.getMessage());
+                    "in LocalApplication.createManagerUserData: " + ex.getMessage());
         }
 
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
@@ -127,9 +145,9 @@ public class LocalApplication {
         DeleteQueueRequest deleteManLocQ = DeleteQueueRequest.builder().
                 queueUrl(getQUrl("Manager_Local_Queue" + localAppId, sqs)).build();
         DeleteQueueRequest deleteTasksQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("TasksQueue" + localAppId, sqs)).build();
+                queueUrl(getQUrl("TasksQueue", sqs)).build();
         DeleteQueueRequest deleteTasksResultsQ = DeleteQueueRequest.builder().
-                queueUrl(getQUrl("TasksResultsQ" + localAppId, sqs)).build();
+                queueUrl(getQUrl("TasksResultsQ" + localAppId , sqs)).build();
         try {
             sqs.deleteQueue(deleteManLocQ);
             sqs.deleteQueue(deleteTasksQ);

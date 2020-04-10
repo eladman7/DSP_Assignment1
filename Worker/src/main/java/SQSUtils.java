@@ -25,7 +25,11 @@ public class SQSUtils {
                 .maxNumberOfMessages(1)
                 .waitTimeSeconds(waitTime)
                 .build();
-        List<Message> messages = sqs.receiveMessage(receiveRequest).messages();
+        List<Message> messages = null;
+        //adding try and catch for cloud reasons.. so it'll keep on running.
+        try {
+          messages = sqs.receiveMessage(receiveRequest).messages();
+        } catch (SqsException ignored) {} //there is already some handler for null case
         return CollectionUtils.isNullOrEmpty(messages) ? null : messages.get(0);
     }
 
@@ -51,7 +55,7 @@ public class SQSUtils {
         try {
             tasksQUrl = getQUrl(qName);
             // Throw exception in the first try
-        } catch (Exception ex) {
+        } catch (QueueDoesNotExistException ex) {
             createQByName(qName);
             tasksQUrl = getQUrl(qName);
         }
@@ -74,11 +78,18 @@ public class SQSUtils {
      * @return this function return the Q url by its name.
      */
     private static String getQUrl(String QUEUE_NAME) {
+        String queueUrl = "";
         GetQueueUrlRequest getQueueRequest = GetQueueUrlRequest.builder()
                 .queueName(QUEUE_NAME)
                 .build();
         //get url in order to send later
-        return sqs.getQueueUrl(getQueueRequest).queueUrl();
+        try {
+            queueUrl = sqs.getQueueUrl(getQueueRequest).queueUrl();
+        }
+        catch (QueueDoesNotExistException ignored) {
+            System.out.println("Exception ignored in Worker.getQUrl():\n" + ignored);
+        }
+        return queueUrl;
     }
 
     private static void putMessageInSqs(String queueUrl, String message) {
@@ -87,6 +98,10 @@ public class SQSUtils {
                 .messageBody(message)
                 .delaySeconds(5)
                 .build();
-        sqs.sendMessage(send_msg_request);
+        //added for cloud reasons.
+        try {
+            sqs.sendMessage(send_msg_request);
+        } catch (Exception ex) {
+            System.out.println("Exception at SQSUtils.putMessageInSqs: " + ex);}
     }
 }

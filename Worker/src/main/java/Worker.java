@@ -70,6 +70,7 @@ public class Worker {
 
     private static void handleFailure(Exception e, String inputFile, String opName, String outQName) {
         System.out.println("inside Worker.handleFailure()");
+        System.out.println("Failure: " + e);
         SQSUtils.sendMSG(outQName, buildFailedMessage(e, inputFile, opName));
     }
 }
