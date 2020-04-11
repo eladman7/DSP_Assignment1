@@ -1,11 +1,3 @@
 ToText	http://www.elizabar.com/assets/pdfs/pascater11.pdf
 ToImage	http://www.chj-sarasota.org/2014_Seder_Invite_for_Connection_Final.pdf
 ToHTML	http://www.uuja.org/holidays/lit/Revised_UU_Version_Humanist_Haggadah_061704.pdf
-ToImage	http://www.wildfirerestaurant.com/sites/default/files/F%20Passover%20Club%20Menu%204.pdf
-ToImage	http://www.chosengarden.com/images/Menu-Passover.pdf
-ToHTML	http://www.godandscience.org/apologetics/haggadah.pdf
-ToImage	http://www.golombeckspice.com/resources_content/Passover%20and%20Spices.pdf
-ToImage	http://www.golombeckspice.com/resources_content/Passover%20and%20Spices.pdf
-ToText	http://www.bgemc.org/2014_Pesach_Information_Booking_sheet.pdf
-ToImage	http://www.mortonwilliams.com/Easter-Passover_Menu_2014.pdf
-ToImage	http://www.jewishvoice.org/assets/pdfs/08-03-01-03-haggadah.pdf

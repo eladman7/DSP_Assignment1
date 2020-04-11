@@ -15,6 +15,7 @@ public class Worker {
                     System.out.println("worker: shutting down... goodbye");
                     break;
                 }
+                System.out.println(message.body());
                 outputQName = outputQNamePrefix + extractOutQName(message);
                 handleNewPDFTask(message, outputQName, inputQName);
             }

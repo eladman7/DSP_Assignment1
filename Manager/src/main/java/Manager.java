@@ -31,13 +31,16 @@ public class Manager {
                         System.out.println("waiting for all local apps connections to finish");
                         executor.shutdown();
                         waitExecutorToFinish(executor);
-                        System.out.println("terminating ec2 instances.. ");
+                        System.out.println("terminating ec2 instances. ");
                         EC2Utils.terminateEc2Instances();
-                        System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
+                        System.out.println("succeed terminate all ec2 instances, start deleting TasksQueue process");
+                        SQSUtils.deleteQ("TasksQueue");
+                        System.out.println("Deleting Local < -- > Manager Queue..");
+                        SQSUtils.deleteQ("Local_Manager_Queue");
+
                         break;
                     } else if (isS3Message(inputMessage.body())) {
-//                        int numOfMsgForWorker = extractN(inputMessage);
-                        int numOfMsgForWorker = 3;
+                        int numOfMsgForWorker = extractN(inputMessage);
                         System.out.println("Manager executing runner with ResultQ: TasksResultsQ" + extractId(inputMessage.body())
                                 + " msgPerWorker: " + numOfMsgForWorker);
                         pool.execute(new ManagerRunner("TasksQueue",

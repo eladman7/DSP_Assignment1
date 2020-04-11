@@ -48,6 +48,7 @@ public class ManagerRunner implements Runnable {
 
             int numOfWorkers;
             if (numOfRunningWorkers == 0) {
+                // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
                 numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
             } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
 
@@ -62,13 +63,15 @@ public class ManagerRunner implements Runnable {
 
             // Delegate Tasks to workers.
             for (String task : tasks) {
+                System.out.println("task: " + task);
                 SQSUtils.sendMSG(tasksQName, task + " " + id);
             }
             System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
                     "(it sounds like a good time to lunch them!)");
             //assert there are no more than 10 workers running.
             if(numOfWorkers + numOfRunningWorkers < 10) {
-                createWorkers(numOfWorkers, amiId);
+                if(numOfWorkers > 0)
+                    createWorkers(numOfWorkers, amiId);
             }
             else {
                 System.out.println("tried to build more than 10 instances.. exit..");
@@ -96,31 +99,28 @@ public class ManagerRunner implements Runnable {
         int leftToRead = numOfMessages;
         FileWriter summaryFile;
         try {
-            summaryFile = new FileWriter("summaryFile" + id + ".html");
-            summaryFile.write("<!DOCTYPE html>\n<html>\n<body>\n");
+            summaryFile = new FileWriter("summaryFile" + id + ".txt");
             System.out.println("ManagerRunner with id: " + id + " expecting to read: " + numOfMessages + " msgs"
                     + " from Q: " + workerOutputQName);
             while (leftToRead > 0) {
                 List<Message> messages = SQSUtils.recieveMessages(workerOutputQName, 0, 1);
                 System.out.println("ManagerRunner with id: " + id);
                 for (Message message : messages) {
-                    summaryFile.write("<p>" + message.body() + "</p>\n");
+                    summaryFile.write(message.body() + '\n');
                     SQSUtils.deleteMSG(message, workerOutputQName);
                     leftToRead--;
                     System.out.println();
                 }
             }
-                //Add html epilogue
-                summaryFile.write("</body>\n</html>");
                 summaryFile.close();
             System.out.println("RunInstancesResponse response finish making summaryFile.. start uploading summary file..");
-            S3Utils.uploadFile("summaryFile" + id + ".html",
+            S3Utils.uploadFile("summaryFile" + id + ".txt",
                     "summaryFile", "dsp-private-bucket", true);
 
             System.out.println("finish uploading file..put message in sqs ");
             SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("dsp-private-bucket", "summaryFile"));
         } catch (Exception ex) {
-            System.out.println("ManagerRunner failed to create final html file. stop running!");
+            System.out.println("ManagerRunner failed to create final summary file. stop running!");
             System.out.println(ex.toString());
         }
     }
@@ -188,11 +188,12 @@ public class ManagerRunner implements Runnable {
         List<String> tasks = new LinkedList<>();
         BufferedReader reader;
         String line;
-
         try {
             reader = new BufferedReader(new FileReader(filename));
             line = reader.readLine();
             while (line != null) {
+                // TODO: 11/04/2020  assert valid input
+//          if (!line.equals(""))
                 tasks.add(line);
                 line = reader.readLine();
             }
@@ -216,6 +217,7 @@ public class ManagerRunner implements Runnable {
                 ", id='" + id + '\'' +
                 '}';
     }
+
 }
 
 

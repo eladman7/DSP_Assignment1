@@ -10,7 +10,7 @@ public class SQSUtils {
     private final static SqsClient sqs = SqsClient.builder().region(Region.US_EAST_1).build();
 
     public static void sendMSG(String qName, String messageBody) {
-        System.out.println("inside SQSUtils.sendMSG()");
+//        System.out.println("inside SQSUtils.sendMSG()");
         BuildQueueIfNotExists(qName);
         putMessageInSqs(getQUrl(qName), messageBody);
     }
@@ -32,7 +32,7 @@ public class SQSUtils {
     }
 
     public static List<Message> recieveMessages(String qName, int waitTime, int maxCount) {
-        System.out.println("inside SQSUtils.recieveMSG()");
+//        System.out.println("inside SQSUtils.recieveMSG()");
         ReceiveMessageRequest receiveRequest = getReceiveMessageRequest(qName, waitTime, maxCount);
         List<Message> messages = null;
         //adding try and catch for cloud reasons.. so it'll keep on running.

@@ -1,22 +1,29 @@
-import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.Message;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class LocalApplication {
 
     private static final String PRIVATE_BUCKET = "dsp-private-bucket";
+    private static final String PUBLIC_BUCKET = "dsp-public-bucket";
 
     public static void main(String[] args) {
         final String localAppId = String.valueOf(System.currentTimeMillis());
         String input_file_path = args[0];
-        int numOfPdfPerWorker = Integer.parseInt(args[1]);
-        boolean terminate = Boolean.valueOf(args[2]);
+        String output_file_name = args[1];
+        int numOfPdfPerWorker = Integer.parseInt(args[2]);
+        boolean terminate = Boolean.parseBoolean(args[3]);
         String inputFileKey = "inputFile" + localAppId;
         String amiId = "ami-076515f20540e6e0b";
 
         // ---- Upload input file to s3 ----
+        // TODO: 12/04/2020 Should be PRIVATE!
         S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET, false);      // Upload input File to S3
         System.out.println("success upload input file");
 
@@ -60,52 +67,86 @@ public class LocalApplication {
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
         try {
-            S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + localAppId + ".html");
-        } catch (Exception ignored) {
+            S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + localAppId + ".txt");
+
+            makeSummaryFile("summaryFile" + localAppId + ".txt", output_file_name);
+        } catch (Exception getObjException) {
+            System.out.println(getObjException.getMessage());
             //send termination message if needed
         } finally {
+            //We want to delete this special local app Q any way when finish.
+            System.out.println("deleting LA Q's");
+            deleteLocalAppQueues(localAppId);
             if (terminate) {
                 SQSUtils.sendMSG(LocalManagerQName, "terminate");
                 System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
-//                deleteLocalAppQueues(localAppId, sqs);
-            } else {
-
             }
-//            sendTerminationMessageIfNeeded(terMessage, sqs, localManagerQUrl);
         }
-//                        deleteLocalAppQueues(localAppId, sqs);
     }
 
 
-    // TODO: 07/04/2020 connect num of msg per worker to here
-    private static String createManagerUserData(int numOfPdfPerWorker) {
-        String bucketName = PRIVATE_BUCKET;
-        String fileKey = "managerapp";
-        System.out.println("Uploading manager jar..");
-        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
-                fileKey, bucketName, false);
+    private static void makeSummaryFile(String fileName, String outputFileName) throws IOException {
+        System.out.println("Start making summary file.");
+        BufferedReader reader;
+        String line;
+        String op, inputLink, rest;
+        reader = new BufferedReader(new FileReader(fileName));
+        FileWriter summaryFile = new FileWriter(outputFileName + ".html");
+        summaryFile.write("<!DOCTYPE html>\n<html>\n<body>\n");
+        line = reader.readLine();
+        while (line != null) {
+            String[] resLine = line.split("\\s+");
+            op = resLine[0];
+            inputLink = resLine[1];
+            rest = String.join(" ", Arrays.copyOfRange(resLine, 2, resLine.length));
 
-        try {
-            System.out.println("Uploading worker jar..");
-            S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
-                    "workerapp", bucketName, false);
-        } catch (Exception ex) {
-            System.out.println(
-                    "in LocalApplication.createManagerUserData: " + ex.getMessage());
+            if (conversionSucceeded(rest, LocalApplication.PUBLIC_BUCKET)) {
+                summaryFile.write("<p>" + op + " " + inputLink + " " + "<a href=" + rest + ">" + rest + "</a></p>\n");
+            } else {
+                summaryFile.write("<p>" + op + " " + inputLink + " " + rest + "</p>\n");
+            }
+            line = reader.readLine();
+
         }
+        //Add html epilogue
+        summaryFile.write("</body>\n</html>");
+        summaryFile.close();
+        summaryFile.close();
+        reader.close();
+        System.out.println("Finish making summary file.");
 
-        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+    }
+
+    public static boolean conversionSucceeded(String link, String bucketName) {
+        String prefix = "https://" + bucketName + ".s3.amazonaws.com";
+        if (link.length() < prefix.length())
+            return false;
+        return prefix.equals(link.substring(0, prefix.length()));
+
+    }
+
+    private static String createManagerUserData(int numOfPdfPerWorker) {
+        String fileKey = "managerapp";
+//        System.out.println("Uploading manager jar..");
+//        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
+//                fileKey, PRIVATE_BUCKET, false);
+//
+//        System.out.println("Uploading worker jar..");
+//        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
+//                "workerapp", PRIVATE_BUCKET, false);
+//        System.out.println("Finish upload jars.");
+
+        String s3Path = "https://" + PRIVATE_BUCKET + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
                 + "wget " + s3Path + " -O /home/ec2-user/Manager.jar\n" +
-                "java -jar /home/ec2-user/Manager.jar " + numOfPdfPerWorker + "\n";
+                "java -jar /home/ec2-user/Manager.jar " + "\n";
         System.out.println("user data: " + script);
-        return script;
-//        return "";
+//        return script;
+        return "";
     }
 
-    private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {
+    private static void deleteLocalAppQueues(String localAppId) {
         SQSUtils.deleteQ("Manager_Local_Queue" + localAppId);
-        SQSUtils.deleteQ("TasksQueue");
         SQSUtils.deleteQ("TasksResultsQ" + localAppId);
     }
 
