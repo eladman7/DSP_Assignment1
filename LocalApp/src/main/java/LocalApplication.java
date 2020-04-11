@@ -23,7 +23,7 @@ public class LocalApplication {
         // ---- Upload first message to sqs
         String LocalManagerQName = "Local_Manager_Queue";
         String fileUrl = getFileUrl(PRIVATE_BUCKET, inputFileKey);
-        SQSUtils.sendMSG(LocalManagerQName, fileUrl);
+        SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " +numOfPdfPerWorker);
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance

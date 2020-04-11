@@ -13,9 +13,6 @@ public class Manager {
     public static void main(String[] args) {
         // Currently assuming there is only one LocalApplication.
         final String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
-        int numOfMsgForWorker = Integer.parseInt(args[0]);// Save number of msg for each worker
-        System.out.println("manager: setting num of messages per worker to: " + numOfMsgForWorker);
-
         // Read message from Local
         // Busy Wait until terminate message
         List<Message> messages;
@@ -39,6 +36,7 @@ public class Manager {
                         System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
                         break;
                     } else if (isS3Message(inputMessage.body())) {
+                        int numOfMsgForWorker = extractN(inputMessage);
                         System.out.println("Manager executing runner with ResultQ: TasksResultsQ" + extractId(inputMessage.body())
                                 + " msgPerWorker: " + numOfMsgForWorker);
                         pool.execute(new ManagerRunner("TasksQueue",
@@ -52,6 +50,10 @@ public class Manager {
             }
         }
 
+    }
+
+    private static int extractN(Message msg) {
+        return Integer.valueOf(msg.body().split("\\s+")[2]);
     }
 
     /**
