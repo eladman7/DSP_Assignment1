@@ -100,6 +100,7 @@ public class LocalApplication {
                 "java -jar /home/ec2-user/Manager.jar " + numOfPdfPerWorker + "\n";
         System.out.println("user data: " + script);
         return script;
+//        return "";
     }
 
     private static void deleteLocalAppQueues(String localAppId, SqsClient sqs) {

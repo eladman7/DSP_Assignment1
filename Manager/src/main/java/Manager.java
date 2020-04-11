@@ -36,7 +36,8 @@ public class Manager {
                         System.out.println("succeed terminate all ec2 instances, quiting.. Bye");
                         break;
                     } else if (isS3Message(inputMessage.body())) {
-                        int numOfMsgForWorker = extractN(inputMessage);
+//                        int numOfMsgForWorker = extractN(inputMessage);
+                        int numOfMsgForWorker = 3;
                         System.out.println("Manager executing runner with ResultQ: TasksResultsQ" + extractId(inputMessage.body())
                                 + " msgPerWorker: " + numOfMsgForWorker);
                         pool.execute(new ManagerRunner("TasksQueue",
@@ -84,7 +85,7 @@ public class Manager {
         Matcher matcher = pattern.matcher(messagePath);
         if (matcher.find()) {
 
-            return matcher.group(2);
+            return matcher.group(2).split("\\s+")[0];
         }
         return " ";
     }

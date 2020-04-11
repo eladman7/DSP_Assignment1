@@ -34,7 +34,8 @@ public class ManagerRunner implements Runnable {
         //download input file, Save under "inputFile.txt"
         try {
             S3Utils.getObjectToLocal(inputKey, inputBucket, "inputFile" + id + ".txt");
-        } catch (Exception ignored) {
+        } catch (Exception getObj) {
+            System.out.println(getObj.getMessage());
         } finally {
 
             // Create SQS message for each url in the input file.
@@ -108,10 +109,10 @@ public class ManagerRunner implements Runnable {
                     leftToRead--;
                     System.out.println();
                 }
+            }
                 //Add html epilogue
                 summaryFile.write("</body>\n</html>");
                 summaryFile.close();
-            }
             System.out.println("RunInstancesResponse response finish making summaryFile.. start uploading summary file..");
             S3Utils.uploadFile("summaryFile" + id + ".html",
                     "summaryFile", "dsp-private-bucket", true);
@@ -173,9 +174,10 @@ public class ManagerRunner implements Runnable {
         Matcher matcher = pattern.matcher(body);
         if (matcher.find()) {
 
-            return matcher.group(2);
+            return matcher.group(2).split("\\s+")[0];
         }
         return " ";
+
     }
 
     /**

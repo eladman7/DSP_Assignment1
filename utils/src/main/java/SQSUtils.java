@@ -20,7 +20,7 @@ public class SQSUtils {
     }
 
     public static Message recieveMSG(String qName, int waitTime) {
-        System.out.println("inside SQSUtils.recieveMSG()");
+//        System.out.println("inside SQSUtils.recieveMSG()");
         ReceiveMessageRequest receiveRequest = getReceiveMessageRequest(qName, waitTime, 1);
         List<Message> messages = null;
         //adding try and catch for cloud reasons.. so it'll keep on running.
