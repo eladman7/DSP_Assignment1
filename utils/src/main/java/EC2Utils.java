@@ -9,19 +9,20 @@ public class EC2Utils {
     private final static Ec2Client ec2 = Ec2Client.builder()
             .region(Region.US_EAST_1)
             .build();
+    private final static String amiId = "ami-076515f20540e6e0b";
 
-    public static void createEc2Instance(String amiId, String ec2Name, String userDataScript, int instancesCount) {
+
+    public static void createEc2Instance(String ec2Name, String userDataScript, int instancesCount) {
         String[] name = {ec2Name};
-        createEc2Instance(amiId, name, userDataScript, instancesCount);
+        createEc2Instance(name, userDataScript, instancesCount);
     }
 
     /**
      * create an Ec2 instance
      *
-     * @param amiId
-     * @param ec2Name
+     * @param ec2Name name for the instance
      */
-    public static void createEc2Instance(String amiId, String[] ec2Name, String userDataScript, int instancesCount) {
+    public static void createEc2Instance(String[] ec2Name, String userDataScript, int instancesCount) {
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .iamInstanceProfile(IamInstanceProfileSpecification.builder()
@@ -101,6 +102,54 @@ public class EC2Utils {
         } while (nextToken != null);
     }
 
+
+    //Local App should wait for other before lunching Workers.
+    public synchronized static void lunchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
+        int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
+        int numOfWorkers;
+        if (numOfRunningWorkers == 0) {
+            // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
+            numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
+        } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
+
+        //assert there are no more than 10 workers running.
+        if (numOfWorkers + numOfRunningWorkers < 10) {
+            if (numOfWorkers > 0)
+                createWorkers(numOfWorkers, tasksQName, workerOutputQName);
+        } else {
+
+            System.out.println("tried to build more than 10 instances ...");
+            if (numOfRunningWorkers == 0)
+                //This is the case where numOfRunning=0 & numOfWorkers>=10. 9 + manager = 10;
+                createWorkers(9, tasksQName, workerOutputQName);
+        }
+    }
+
+    /**
+     * This function create numOfWorker Ec2-workers.
+     *
+     * @param numOfWorkers how much workers to create
+     */
+    public static void createWorkers(int numOfWorkers, String tasksQName, String workerOutputQName) {
+        String[] instancesNames = new String[numOfWorkers];
+        for (int i = 0; i < numOfWorkers; i++) {
+            instancesNames[i] = "WorkerNumber" + i;
+        }
+        EC2Utils.createEc2Instance(instancesNames, createWorkerUserData(tasksQName, workerOutputQName), numOfWorkers);
+    }
+
+    private static String createWorkerUserData(String tasksQName, String workerOutputQName) {
+        String bucketName = S3Utils.PRIVATE_BUCKET;
+        String fileKey = "workerapp";
+        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
+                "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
+        System.out.println("user data: " + script);
+        return script;
+    }
+
+
     /**
      * @return the number of currently running client
      */
@@ -128,4 +177,5 @@ public class EC2Utils {
 
         return counter;
     }
+
 }

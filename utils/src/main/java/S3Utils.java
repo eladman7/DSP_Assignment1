@@ -15,15 +15,15 @@ import java.util.List;
 public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
-    public static final String PRIVATE_BUCKET = "dsp-private-bucket" + System.currentTimeMillis();
+//    public static final String PRIVATE_BUCKET = "dsp-private-bucket" + System.currentTimeMillis();
+    public static final String PRIVATE_BUCKET = "dsp-private-bucket";
     public static final String PUBLIC_BUCKET = "dsp-public-bucket";
 
     // TODO: 08/04/2020 change isPrivate.
     // TODO: 09/04/2020 make public bucket once, only in the first local app
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
-        String bucketName = "dsp-public-bucket";
-        uploadFile(fileLocalPath, fileKey, bucketName, isPrivate);
-        return bucketName;
+        uploadFile(fileLocalPath, fileKey, PUBLIC_BUCKET, isPrivate);
+        return PUBLIC_BUCKET;
     }
 
     public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
@@ -45,9 +45,6 @@ public class S3Utils {
     /**
      * Upload first Input file to S3
      *
-     * @param input_file
-     * @param bucket
-     * @param key
      */
     private static void uploadInputFile(File input_file, String bucket, String key, boolean isPrivate) {
         try {

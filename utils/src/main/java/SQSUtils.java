@@ -52,7 +52,7 @@ public class SQSUtils {
     }
 
     public static boolean deleteMSG(Message msg, String qName) {
-        System.out.println("inside SQSUtils.deleteMSG()");
+//        System.out.println("inside SQSUtils.deleteMSG()");
         DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
                 .queueUrl(getQUrl(qName))
                 .receiptHandle(msg.receiptHandle())

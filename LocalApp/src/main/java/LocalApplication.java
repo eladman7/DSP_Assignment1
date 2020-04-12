@@ -17,16 +17,15 @@ public class LocalApplication {
         int numOfPdfPerWorker = Integer.parseInt(args[2]);
         boolean terminate = Boolean.parseBoolean(args[3]);
         String inputFileKey = "inputFile" + localAppId;
-        String amiId = "ami-076515f20540e6e0b";
 
         // ---- Upload input file to s3 ----
         // TODO: 12/04/2020 Should be PRIVATE!
-        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET, false);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET, true);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
         String LocalManagerQName = "Local_Manager_Queue";
-        String fileUrl = getFileUrl(S3Utils.PRIVATE_BUCKET, inputFileKey);
+        String fileUrl = getFileUrl(inputFileKey);
         System.out.println("file is here: " + fileUrl);
         SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " + numOfPdfPerWorker);
         System.out.println("success uploading first message to sqs");
@@ -35,8 +34,8 @@ public class LocalApplication {
         if (!EC2Utils.isManagerRunning()) {
             System.out.println("There is no running manager.. lunch manager");
             // Run manager JarFile with input : numOfPdfPerWorker.
-            String managerScript = createManagerUserData(numOfPdfPerWorker);
-            EC2Utils.createEc2Instance(amiId, "Manager", managerScript, 1);
+            String managerScript = createManagerUserData();
+            EC2Utils.createEc2Instance("Manager", managerScript, 1);
             System.out.println("Success lunching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
@@ -123,7 +122,7 @@ public class LocalApplication {
 
     }
 
-    private static String createManagerUserData(int numOfPdfPerWorker) {
+    private static String createManagerUserData() {
         String fileKey = "managerapp";
         System.out.println("Uploading manager jar..");
         S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
@@ -139,8 +138,7 @@ public class LocalApplication {
                 + "wget " + s3Path + " -O /home/ec2-user/Manager.jar\n" +
                 "java -jar /home/ec2-user/Manager.jar " + "\n";
         System.out.println("user data: " + script);
-//        return script;
-        return "";
+        return script;
     }
 
     private static void deleteLocalAppQueues(String localAppId) {
@@ -149,7 +147,7 @@ public class LocalApplication {
     }
 
     /**
-     * @param body
+     * @param body message body
      * @return the bucket name from a sqs message
      */
     public static String extractBucket(String body) {
@@ -162,7 +160,7 @@ public class LocalApplication {
     }
 
     /**
-     * @param body
+     * @param body message body
      * @return the key from a sqs message
      */
     public static String extractKey(String body) {
@@ -178,12 +176,11 @@ public class LocalApplication {
     /**
      * Extract the file url from some s3 path
      *
-     * @param bucket
-     * @param key
-     * @return
+     * @param key of the bucket
+     * @return file url
      */
-    private static String getFileUrl(String bucket, String key) {
-        return "s3://" + bucket + "/" + key;
+    private static String getFileUrl(String key) {
+        return "s3://" + S3Utils.PRIVATE_BUCKET + "/" + key;
     }
 
 }

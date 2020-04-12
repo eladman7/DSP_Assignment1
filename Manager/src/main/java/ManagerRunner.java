@@ -16,19 +16,18 @@ public class ManagerRunner implements Runnable {
     private final String workerOutputQName;
     private final String id;
 
-
     public ManagerRunner(String tasksQName, String workerOutputQ, int numOfMsgForWorker, String inputMessage, String id) {
         this.id = id;
         this.tasksQName = tasksQName;
         this.numOfMsgForWorker = numOfMsgForWorker;
         this.inputMessage = inputMessage;
         this.workerOutputQName = workerOutputQ + id;
+
     }
 
 
     @Override
     public void run() {
-        String amiId = "ami-076515f20540e6e0b";
         String inputBucket = extractBucket(inputMessage);
         String inputKey = extractKey(inputMessage);
         //download input file, Save under "inputFile.txt"
@@ -40,26 +39,14 @@ public class ManagerRunner implements Runnable {
 
             // Create SQS message for each url in the input file.
             List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
-            int messageCount = tasks.size();
-            System.out.println("numOfMessages: " + messageCount);
-
-            // TODO: 10/04/2020 add synchronization somehow
-            int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
-
-            int numOfWorkers;
-            if (numOfRunningWorkers == 0) {
-                // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
-                numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
-            } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
-
-            // Build Tasks Q name
-            // TODO: 10/04/2020 stop this stupid check after the first time.
-            SQSUtils.BuildQueueIfNotExists(tasksQName);
-            System.out.println("build TasksQ succeed");
 
             // Build Workers output Q
             SQSUtils.BuildQueueIfNotExists(workerOutputQName);
             System.out.println("build Workers outputQ succeed");
+
+
+            int messageCount = tasks.size();
+            System.out.println("numOfMessages: " + messageCount);
 
             // Delegate Tasks to workers.
             for (String task : tasks) {
@@ -68,15 +55,11 @@ public class ManagerRunner implements Runnable {
             }
             System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
                     "(it sounds like a good time to lunch them!)");
-            //assert there are no more than 10 workers running.
-            if (numOfWorkers + numOfRunningWorkers < 10) {
-                if (numOfWorkers > 0)
-                    createWorkers(numOfWorkers, amiId);
-            } else {
-                System.out.println("tried to build more than 10 instances.. exit..");
-                return;
-            }
-            System.out.println("create workers succeed");
+
+            System.out.println("Lunching Workers..");
+            EC2Utils.lunchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
+            System.out.println("Finished lunching workers process.");
+
             System.out.println("Start making summary file.. ");
             makeAndUploadSummaryFile(messageCount);
 
@@ -90,7 +73,7 @@ public class ManagerRunner implements Runnable {
      * Make summary file from all workers results and upload to s3 bucket, named "summaryfilebucket"
      * so in order to make this work there is bucket with this name before the function run
      *
-     * @param numOfMessages
+     * @param numOfMessages number of messages we got
      */
     private void makeAndUploadSummaryFile(int numOfMessages) {
         int leftToRead = numOfMessages;
@@ -101,7 +84,6 @@ public class ManagerRunner implements Runnable {
                     + " from Q: " + workerOutputQName);
             while (leftToRead > 0) {
                 List<Message> messages = SQSUtils.recieveMessages(workerOutputQName, 0, 1);
-                System.out.println("ManagerRunner with id: " + id);
                 for (Message message : messages) {
                     summaryFile.write(message.body() + '\n');
                     SQSUtils.deleteMSG(message, workerOutputQName);
@@ -115,40 +97,16 @@ public class ManagerRunner implements Runnable {
                     "summaryFile", S3Utils.PRIVATE_BUCKET, false);
 
             System.out.println("finish uploading file..put message in sqs ");
-            SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("dsp-private-bucket", "summaryFile"));
+            SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("summaryFile"));
         } catch (Exception ex) {
             System.out.println("ManagerRunner failed to create final summary file. stop running!");
             System.out.println(ex.toString());
         }
     }
 
-    /**
-     * This function create numOfWorker Ec2-workers.
-     *
-     * @param numOfWorkers
-     * @param amiId
-     */
-    public void createWorkers(int numOfWorkers, String amiId) {
-        String[] instancesNames = new String[numOfWorkers];
-        for (int i = 0; i < numOfWorkers; i++) {
-            instancesNames[i] = "WorkerNumber" + i;
-        }
-        EC2Utils.createEc2Instance(amiId, instancesNames, createWorkerUserData(), numOfWorkers);
-    }
-
-    private String createWorkerUserData() {
-        String bucketName = S3Utils.PRIVATE_BUCKET;
-        String fileKey = "workerapp";
-        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\n"
-                + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
-                "java -jar /home/ec2-user/worker.jar " + this.tasksQName + " " + this.workerOutputQName + "\n";
-        System.out.println("user data: " + script);
-        return script;
-    }
 
     /**
-     * @param body
+     * @param body message body
      * @return the bucket name from a sqs message
      */
     public String extractBucket(String body) {
@@ -161,7 +119,6 @@ public class ManagerRunner implements Runnable {
     }
 
     /**
-     * @param body
      * @return the key from a sqs message
      */
     public String extractKey(String body) {
@@ -176,7 +133,7 @@ public class ManagerRunner implements Runnable {
     }
 
     /**
-     * @param filename
+     * @param filename file name
      * @return List of all the messages from the pdf file, which we get by sqs.
      */
     public List<String> createSqsMessages(String filename) {
@@ -198,8 +155,8 @@ public class ManagerRunner implements Runnable {
         return tasks;
     }
 
-    private String getFileUrl(String bucket, String key) {
-        return "s3://" + bucket + "/" + key;
+    private String getFileUrl(String key) {
+        return "s3://" + S3Utils.PRIVATE_BUCKET + "/" + key;
     }
 
     @Override

@@ -10,16 +10,23 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Manager {
-
     public static void main(String[] args) {
         // Currently assuming there is only one LocalApplication.
         final String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
+        final String tasksQName = "TasksQueue";
+
         // Read message from Local
         // Busy Wait until terminate message
         List<Message> messages;
         Message inputMessage;
         ExecutorService executor = Executors.newCachedThreadPool();
         ThreadPoolExecutor pool = (ThreadPoolExecutor) executor;
+
+        // Build Tasks Q
+        SQSUtils.BuildQueueIfNotExists(tasksQName);
+        System.out.println("Manager build TasksQ - succeed");
+
+
         while (true) {
             try {
                 messages = SQSUtils.recieveMessages(sqsName, 0, 1);
@@ -39,7 +46,8 @@ public class Manager {
                         System.out.println("Deleting Local < -- > Manager Queue..");
                         SQSUtils.deleteQ("Local_Manager_Queue");
                         break;
-                    } else if (isS3Message(inputMessage.body())) {
+                    }
+                    else if (isS3Message(inputMessage.body())) {
                         int numOfMsgForWorker = extractN(inputMessage);
                         System.out.println("Manager executing runner with ResultQ: TasksResultsQ" + extractId(inputMessage.body())
                                 + " msgPerWorker: " + numOfMsgForWorker);
@@ -49,38 +57,38 @@ public class Manager {
                         SQSUtils.deleteMSG(inputMessage, sqsName);
                     }
                 }
-            } catch (IndexOutOfBoundsException ignored) {
-                System.out.println(ignored.getMessage());
+            } catch (IndexOutOfBoundsException exception) {
+                System.out.println(exception.getMessage());
             }
         }
 
     }
 
     private static int extractN(Message msg) {
-        return Integer.valueOf(msg.body().split("\\s+")[1]);
+        return Integer.parseInt(msg.body().split("\\s+")[1]);
     }
 
     /**
      * Waiting for some LocalApp < --- > Manager connection to finish.
      *
-     * @param executor
+     * @param executor pool service
      */
     private static void waitExecutorToFinish(ExecutorService executor) {
         try {
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 
-        } catch (InterruptedException ignored) {
-            System.out.println(ignored.getMessage());
+        } catch (InterruptedException exception) {
+            System.out.println(exception.getMessage());
         }
     }
 
     private static boolean isS3Message(String inputMessage) {
-        return inputMessage.substring(0, 5).equals("s3://");
+        return "s3://".equals(inputMessage.substring(0, 5));
 
     }
 
     /**
-     * @param messagePath
+     *
      * @return the key from a sqs message
      */
     public static String extractId(String messagePath) {
