@@ -24,19 +24,25 @@ public class Utils {
     private static final String LOCAL_COPY_NAME = "local_copy";
     private static final String LOCAL_PDF_NAME = LOCAL_COPY_NAME + ".pdf";
     private static final int CONNECTION_TIMEOUT = 3000;
+    private static final int READ_TIMEOUT = 3000;
 
     private static void downloadRemoteFile(String url) throws IOException {
-        System.out.println("inside Utils.convertPdfToImage()");
         URL website = new URL(url);
         HttpURLConnection conn = (HttpURLConnection) website.openConnection();
-        conn.setReadTimeout(CONNECTION_TIMEOUT);
-        try (InputStream in = website.openStream()) {
-            Files.copy(in, Paths.get(LOCAL_PDF_NAME), StandardCopyOption.REPLACE_EXISTING);
+        conn.setReadTimeout(READ_TIMEOUT);
+        conn.setConnectTimeout(CONNECTION_TIMEOUT);
+        int responseCode = conn.getResponseCode();
+        if (responseCode == 200) { // throws an error if cant connect
+            try (InputStream in = website.openStream()) {
+                Files.copy(in, Paths.get(LOCAL_PDF_NAME), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } else { // manually raise error response not 200 ok
+            throw new IOException("Error response. error code: " + responseCode);
         }
     }
 
     public static String convertPdfToImage(String url) throws IOException {
-        // TODO: 05/04/2020 add override option
+        System.out.println("inside Utils.convertPdfToImage()");
         downloadRemoteFile(url);
         PDDocument document = PDDocument.load(new File(LOCAL_PDF_NAME));
         PDFRenderer pdfRenderer = new PDFRenderer(document);

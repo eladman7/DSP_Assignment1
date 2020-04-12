@@ -10,9 +10,6 @@ import java.util.regex.Pattern;
 
 public class LocalApplication {
 
-    private static final String PRIVATE_BUCKET = "dsp-private-bucket";
-    private static final String PUBLIC_BUCKET = "dsp-public-bucket";
-
     public static void main(String[] args) {
         final String localAppId = String.valueOf(System.currentTimeMillis());
         String input_file_path = args[0];
@@ -24,13 +21,14 @@ public class LocalApplication {
 
         // ---- Upload input file to s3 ----
         // TODO: 12/04/2020 Should be PRIVATE!
-        S3Utils.uploadFile(input_file_path, inputFileKey, PRIVATE_BUCKET, false);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET, false);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
         String LocalManagerQName = "Local_Manager_Queue";
-        String fileUrl = getFileUrl(PRIVATE_BUCKET, inputFileKey);
-        SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " +numOfPdfPerWorker);
+        String fileUrl = getFileUrl(S3Utils.PRIVATE_BUCKET, inputFileKey);
+        System.out.println("file is here: " + fileUrl);
+        SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " + numOfPdfPerWorker);
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance
@@ -100,7 +98,7 @@ public class LocalApplication {
             inputLink = resLine[1];
             rest = String.join(" ", Arrays.copyOfRange(resLine, 2, resLine.length));
 
-            if (conversionSucceeded(rest, LocalApplication.PUBLIC_BUCKET)) {
+            if (conversionSucceeded(rest, S3Utils.PUBLIC_BUCKET)) {
                 summaryFile.write("<p>" + op + " " + inputLink + " " + "<a href=" + rest + ">" + rest + "</a></p>\n");
             } else {
                 summaryFile.write("<p>" + op + " " + inputLink + " " + rest + "</p>\n");
@@ -127,16 +125,16 @@ public class LocalApplication {
 
     private static String createManagerUserData(int numOfPdfPerWorker) {
         String fileKey = "managerapp";
-//        System.out.println("Uploading manager jar..");
-//        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
-//                fileKey, PRIVATE_BUCKET, false);
-//
-//        System.out.println("Uploading worker jar..");
-//        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
-//                "workerapp", PRIVATE_BUCKET, false);
-//        System.out.println("Finish upload jars.");
+        System.out.println("Uploading manager jar..");
+        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
+                fileKey, S3Utils.PRIVATE_BUCKET, false);
 
-        String s3Path = "https://" + PRIVATE_BUCKET + ".s3.amazonaws.com/" + fileKey;
+        System.out.println("Uploading worker jar..");
+        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
+                "workerapp", S3Utils.PRIVATE_BUCKET, false);
+        System.out.println("Finish upload jars.");
+
+        String s3Path = "https://" + S3Utils.PRIVATE_BUCKET + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
                 + "wget " + s3Path + " -O /home/ec2-user/Manager.jar\n" +
                 "java -jar /home/ec2-user/Manager.jar " + "\n";

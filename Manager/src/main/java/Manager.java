@@ -1,4 +1,5 @@
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.utils.CollectionUtils;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -22,8 +23,8 @@ public class Manager {
         while (true) {
             try {
                 messages = SQSUtils.recieveMessages(sqsName, 0, 1);
-                inputMessage = messages.get(0);
-                if (inputMessage != null) {
+                if (!CollectionUtils.isNullOrEmpty(messages)) {
+                    inputMessage = messages.get(0);
                     // Terminate stay as is, only one send terminate and we done with this.
                     if (inputMessage.body().equals("terminate") && messages.size() == 1) {
                         System.out.println("manager get terminate message, deleting terminate message");
@@ -37,7 +38,6 @@ public class Manager {
                         SQSUtils.deleteQ("TasksQueue");
                         System.out.println("Deleting Local < -- > Manager Queue..");
                         SQSUtils.deleteQ("Local_Manager_Queue");
-
                         break;
                     } else if (isS3Message(inputMessage.body())) {
                         int numOfMsgForWorker = extractN(inputMessage);
@@ -57,7 +57,7 @@ public class Manager {
     }
 
     private static int extractN(Message msg) {
-        return Integer.valueOf(msg.body().split("\\s+")[2]);
+        return Integer.valueOf(msg.body().split("\\s+")[1]);
     }
 
     /**

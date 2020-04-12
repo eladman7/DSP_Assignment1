@@ -69,17 +69,14 @@ public class ManagerRunner implements Runnable {
             System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
                     "(it sounds like a good time to lunch them!)");
             //assert there are no more than 10 workers running.
-            if(numOfWorkers + numOfRunningWorkers < 10) {
-                if(numOfWorkers > 0)
+            if (numOfWorkers + numOfRunningWorkers < 10) {
+                if (numOfWorkers > 0)
                     createWorkers(numOfWorkers, amiId);
-            }
-            else {
+            } else {
                 System.out.println("tried to build more than 10 instances.. exit..");
                 return;
             }
             System.out.println("create workers succeed");
-//            runWorkers with the inputs: TasksQName, this.workerOutputQ
-//            makeAndUploadSummaryFile(sqsClient, s3, messageCount, "Manager_Local_Queue" + id);
             System.out.println("Start making summary file.. ");
             makeAndUploadSummaryFile(messageCount);
 
@@ -112,10 +109,10 @@ public class ManagerRunner implements Runnable {
                     System.out.println();
                 }
             }
-                summaryFile.close();
+            summaryFile.close();
             System.out.println("RunInstancesResponse response finish making summaryFile.. start uploading summary file..");
             S3Utils.uploadFile("summaryFile" + id + ".txt",
-                    "summaryFile", "dsp-private-bucket", true);
+                    "summaryFile", S3Utils.PRIVATE_BUCKET, false);
 
             System.out.println("finish uploading file..put message in sqs ");
             SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("dsp-private-bucket", "summaryFile"));
@@ -137,12 +134,10 @@ public class ManagerRunner implements Runnable {
             instancesNames[i] = "WorkerNumber" + i;
         }
         EC2Utils.createEc2Instance(amiId, instancesNames, createWorkerUserData(), numOfWorkers);
-//        EC2Utils.createEc2Instance(amiId, instancesNames, "", numOfWorkers);
-
     }
 
     private String createWorkerUserData() {
-        String bucketName = "dsp-private-bucket";
+        String bucketName = S3Utils.PRIVATE_BUCKET;
         String fileKey = "workerapp";
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
