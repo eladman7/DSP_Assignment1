@@ -24,7 +24,7 @@ public class ManagerRunner implements Runnable {
         this.workerOutputQName = workerOutputQ + id;
 
     }
-
+// TODO: 13/04/2020 Add delete files.
 
     @Override
     public void run() {
@@ -53,8 +53,9 @@ public class ManagerRunner implements Runnable {
                 System.out.println("task: " + task);
                 SQSUtils.sendMSG(tasksQName, task + " " + id);
             }
-            System.out.println("Delegated all tasks to workers, now waiting for them to finish.." +
-                    "(it sounds like a good time to lunch them!)");
+            System.out.println("Delegated all tasks to workers, now waiting for them to finish..");
+
+
 
             System.out.println("Lunching Workers..");
             EC2Utils.lunchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
@@ -64,6 +65,8 @@ public class ManagerRunner implements Runnable {
             makeAndUploadSummaryFile(messageCount);
 
             System.out.println("finish make and upload summary file");
+            System.out.println("deleting file.. ");
+
             System.out.println("ManagerRunner with id: " + id + " exited!");
         }
     }
@@ -98,6 +101,7 @@ public class ManagerRunner implements Runnable {
 
             System.out.println("finish uploading file..put message in sqs ");
             SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("summaryFile"));
+
         } catch (Exception ex) {
             System.out.println("ManagerRunner failed to create final summary file. stop running!");
             System.out.println(ex.toString());
@@ -144,8 +148,6 @@ public class ManagerRunner implements Runnable {
             reader = new BufferedReader(new FileReader(filename));
             line = reader.readLine();
             while (line != null) {
-                // TODO: 11/04/2020  assert valid input
-//          if (!line.equals(""))
                 tasks.add(line);
                 line = reader.readLine();
             }

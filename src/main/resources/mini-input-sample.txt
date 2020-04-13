@@ -1,3 +1,0 @@
-ToText	http://www.elizabar.com/assets/pdfs/pascater11.pdf
-ToImage	http://www.chj-sarasota.org/2014_Seder_Invite_for_Connection_Final.pdf
-ToHTML	http://www.uuja.org/holidays/lit/Revised_UU_Version_Humanist_Haggadah_061704.pdf
