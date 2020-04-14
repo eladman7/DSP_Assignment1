@@ -57,7 +57,7 @@ public class Manager {
                         SQSUtils.deleteMSG(inputMessage, sqsName);
                     }
                 }
-            } catch (IndexOutOfBoundsException exception) {
+            } catch (Exception exception) {
                 System.out.println(exception.getMessage());
             }
         }

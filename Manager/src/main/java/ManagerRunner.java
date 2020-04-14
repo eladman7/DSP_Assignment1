@@ -55,10 +55,8 @@ public class ManagerRunner implements Runnable {
             }
             System.out.println("Delegated all tasks to workers, now waiting for them to finish..");
 
-
-
             System.out.println("Lunching Workers..");
-            EC2Utils.lunchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
+            EC2Utils.launchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
             System.out.println("Finished lunching workers process.");
 
             System.out.println("Start making summary file.. ");
@@ -91,7 +89,6 @@ public class ManagerRunner implements Runnable {
                     summaryFile.write(message.body() + '\n');
                     SQSUtils.deleteMSG(message, workerOutputQName);
                     leftToRead--;
-                    System.out.println();
                 }
             }
             summaryFile.close();

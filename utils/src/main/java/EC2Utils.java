@@ -104,24 +104,22 @@ public class EC2Utils {
 
 
     //Local App should wait for other before lunching Workers.
-    public synchronized static void lunchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
+    public synchronized static void launchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
         int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
+        // numOfWorkers = // Number of new workers the job require.
         int numOfWorkers;
         if (numOfRunningWorkers == 0) {
             // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
-            numOfWorkers = messageCount / numOfMsgForWorker;      // Number of workers the job require.
+            numOfWorkers = messageCount / numOfMsgForWorker;
         } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
 
         //assert there are no more than 10 workers running.
-        if (numOfWorkers + numOfRunningWorkers < 10) {
+        if (numOfWorkers + numOfRunningWorkers <= 9) {
             if (numOfWorkers > 0)
                 createWorkers(numOfWorkers, tasksQName, workerOutputQName);
         } else {
-
-            System.out.println("tried to build more than 10 instances ...");
-            if (numOfRunningWorkers == 0)
-                //This is the case where numOfRunning=0 & numOfWorkers>=10. 9 + manager = 10;
-                createWorkers(9, tasksQName, workerOutputQName);
+            if(numOfRunningWorkers < 9)
+                createWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
         }
     }
 

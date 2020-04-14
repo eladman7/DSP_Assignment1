@@ -26,7 +26,7 @@ public class S3Utils {
     }
 
     public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
-        File input_file = new File("src/main/resources/" + fileLocalPath + ".txt");
+        File input_file = new File(fileLocalPath);
         uploadInputFile(input_file, bucketName, fileKey, isPrivate);
         return true;
     }
@@ -72,6 +72,7 @@ public class S3Utils {
         } else
             s3.createBucket(CreateBucketRequest
                     .builder()
+                    .acl(BucketCannedACL.PRIVATE)
                     .bucket(bucketName)
                     .createBucketConfiguration(
                             CreateBucketConfiguration.builder()

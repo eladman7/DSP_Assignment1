@@ -13,7 +13,7 @@ public class LocalApplication {
     public static void main(String[] args) {
         final String localAppId = String.valueOf(System.currentTimeMillis());
         //The name of the input file in resources folder.
-        String input_file_name = args[0];
+        String input_file_path = args[0];
         String output_file_name = args[1];
         int numOfPdfPerWorker = Integer.parseInt(args[2]);
         boolean terminate = args.length > 3 && "terminate".equals(args[3]);
@@ -22,7 +22,7 @@ public class LocalApplication {
 
         // ---- Upload input file to s3 ----
 
-        S3Utils.uploadFile(input_file_name, inputFileKey, S3Utils.PRIVATE_BUCKET, true);      // Upload input File to S3
+        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET, true);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs

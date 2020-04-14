@@ -10,7 +10,6 @@ public class SQSUtils {
     private final static SqsClient sqs = SqsClient.builder().region(Region.US_EAST_1).build();
 
     public static void sendMSG(String qName, String messageBody) {
-//        System.out.println("inside SQSUtils.sendMSG()");
         BuildQueueIfNotExists(qName);
         putMessageInSqs(getQUrl(qName), messageBody);
     }
@@ -20,7 +19,6 @@ public class SQSUtils {
     }
 
     public static Message recieveMSG(String qName, int waitTime) {
-//        System.out.println("inside SQSUtils.recieveMSG()");
         ReceiveMessageRequest receiveRequest = getReceiveMessageRequest(qName, waitTime, 1);
         List<Message> messages = null;
         //adding try and catch for cloud reasons.. so it'll keep on running.
@@ -32,7 +30,6 @@ public class SQSUtils {
     }
 
     public static List<Message> recieveMessages(String qName, int waitTime, int maxCount) {
-//        System.out.println("inside SQSUtils.recieveMSG()");
         ReceiveMessageRequest receiveRequest = getReceiveMessageRequest(qName, waitTime, maxCount);
         List<Message> messages = null;
         //adding try and catch for cloud reasons.. so it'll keep on running.
@@ -52,7 +49,6 @@ public class SQSUtils {
     }
 
     public static boolean deleteMSG(Message msg, String qName) {
-//        System.out.println("inside SQSUtils.deleteMSG()");
         DeleteMessageRequest deleteRequest = DeleteMessageRequest.builder()
                 .queueUrl(getQUrl(qName))
                 .receiptHandle(msg.receiptHandle())
