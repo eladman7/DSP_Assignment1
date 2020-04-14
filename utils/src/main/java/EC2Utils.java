@@ -35,6 +35,7 @@ public class EC2Utils {
                 .keyName("key1")
                 .build();
         RunInstancesResponse response = ec2.runInstances(runRequest);
+        int numOfRetries = 0;
         for (int i = 0; i < instancesCount; i++) {
             String instanceId = response.instances().get(i).instanceId();
             Tag tag = Tag.builder()
@@ -53,6 +54,12 @@ public class EC2Utils {
             } catch (Ec2Exception e) {
                 System.err.println("error while tagging an instance.. trying again");
                 i--;
+                numOfRetries++;
+                if (numOfRetries == 100) {
+                    System.out.println("EC2Utils.createEc2Instance() " +
+                            "stop retrying tags creation for ec2 instances after 100 attempts");
+                    break;
+                }
             }
         }
     }
@@ -61,7 +68,7 @@ public class EC2Utils {
     /**
      * @return true iff the manager running
      */
-    public static boolean isManagerRunning() {
+    public static boolean isInstanceRunning(String instanceName) {
         String nextToken = null;
         do {
             DescribeInstancesRequest request = DescribeInstancesRequest.builder().nextToken(nextToken).build();
@@ -71,7 +78,7 @@ public class EC2Utils {
                 for (Instance instance : reservation.instances()) {
                     List<Tag> tagList = instance.tags();
                     for (Tag tag : tagList) {
-                        if (tag.value().equals("Manager") &&
+                        if (tag.value().equals(instanceName) &&
                                 (instance.state().name().toString().equals("running") ||
                                         instance.state().name().toString().equals("pending")))
                             return true;
@@ -88,6 +95,7 @@ public class EC2Utils {
      * Terminate all running ec2 instances
      */
     public static void terminateEc2Instances() {
+        //todo: ask bar - if manager call this- doesnt it kills himself also?
         String nextToken = null;
         do {
             DescribeInstancesRequest dRequest = DescribeInstancesRequest.builder().nextToken(nextToken).build();
@@ -100,51 +108,6 @@ public class EC2Utils {
             }
             nextToken = response.nextToken();
         } while (nextToken != null);
-    }
-
-
-    //Local App should wait for other before lunching Workers.
-    public synchronized static void launchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
-        int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
-        // numOfWorkers = // Number of new workers the job require.
-        int numOfWorkers;
-        if (numOfRunningWorkers == 0) {
-            // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
-            numOfWorkers = messageCount / numOfMsgForWorker;
-        } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
-
-        //assert there are no more than 10 workers running.
-        if (numOfWorkers + numOfRunningWorkers <= 9) {
-            if (numOfWorkers > 0)
-                createWorkers(numOfWorkers, tasksQName, workerOutputQName);
-        } else {
-            if(numOfRunningWorkers < 9)
-                createWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
-        }
-    }
-
-    /**
-     * This function create numOfWorker Ec2-workers.
-     *
-     * @param numOfWorkers how much workers to create
-     */
-    public static void createWorkers(int numOfWorkers, String tasksQName, String workerOutputQName) {
-        String[] instancesNames = new String[numOfWorkers];
-        for (int i = 0; i < numOfWorkers; i++) {
-            instancesNames[i] = "WorkerNumber" + i;
-        }
-        EC2Utils.createEc2Instance(instancesNames, createWorkerUserData(tasksQName, workerOutputQName), numOfWorkers);
-    }
-
-    private static String createWorkerUserData(String tasksQName, String workerOutputQName) {
-        String bucketName = S3Utils.PRIVATE_BUCKET;
-        String fileKey = "workerapp";
-        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
-        String script = "#!/bin/bash\n"
-                + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
-                "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
-        System.out.println("user data: " + script);
-        return script;
     }
 
 

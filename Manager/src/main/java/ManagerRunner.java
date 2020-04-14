@@ -1,4 +1,6 @@
+import software.amazon.awssdk.services.ec2.model.Ec2Exception;
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -41,7 +43,7 @@ public class ManagerRunner implements Runnable {
             List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
 
             // Build Workers output Q
-            SQSUtils.BuildQueueIfNotExists(workerOutputQName);
+            SQSUtils.buildQueueIfNotExists(workerOutputQName);
             System.out.println("build Workers outputQ succeed");
 
 
@@ -56,7 +58,7 @@ public class ManagerRunner implements Runnable {
             System.out.println("Delegated all tasks to workers, now waiting for them to finish..");
 
             System.out.println("Lunching Workers..");
-            EC2Utils.launchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
+            launchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
             System.out.println("Finished lunching workers process.");
 
             System.out.println("Start making summary file.. ");
@@ -67,6 +69,56 @@ public class ManagerRunner implements Runnable {
 
             System.out.println("ManagerRunner with id: " + id + " exited!");
         }
+    }
+
+
+    //Local App should wait for other before lunching Workers.
+    public synchronized static void launchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
+        try {
+            int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
+            // numOfWorkers = // Number of new workers the job require.
+            int numOfWorkers;
+            if (numOfRunningWorkers == 0) {
+                // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
+                numOfWorkers = messageCount / numOfMsgForWorker;
+            } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
+
+            //assert there are no more than 10 workers running.
+            if (numOfWorkers + numOfRunningWorkers <= 9) {
+                if (numOfWorkers > 0)
+                    bootstrapWorkers(numOfWorkers, tasksQName, workerOutputQName);
+            } else {
+                if (numOfRunningWorkers < 9)
+                    bootstrapWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
+            }
+        } catch (Ec2Exception ec2Ex) {
+            System.out.println("ManagerRunner.launchWorkers(): got Ec2Exception... " + ec2Ex.getMessage());
+        }
+    }
+
+
+    /**
+     * This function create numOfWorker Ec2-workers.
+     *
+     * @param numOfInstances how much workers to create
+     */
+    public static void bootstrapWorkers(int numOfInstances, String tasksQName, String workerOutputQName) {
+        String[] instancesNames = new String[numOfInstances];
+        for (int i = 0; i < numOfInstances; i++) {
+            instancesNames[i] = "WorkerNumber" + i;
+        }
+        EC2Utils.createEc2Instance(instancesNames, createWorkerUserData(tasksQName, workerOutputQName), numOfInstances);
+    }
+
+    private static String createWorkerUserData(String tasksQName, String workerOutputQName) {
+        String bucketName = S3Utils.PRIVATE_BUCKET;
+        String fileKey = "workerapp";
+        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
+        String script = "#!/bin/bash\n"
+                + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
+                "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
+        System.out.println("user data: " + script);
+        return script;
     }
 
 
@@ -84,11 +136,16 @@ public class ManagerRunner implements Runnable {
             System.out.println("ManagerRunner with id: " + id + " expecting to read: " + numOfMessages + " msgs"
                     + " from Q: " + workerOutputQName);
             while (leftToRead > 0) {
-                List<Message> messages = SQSUtils.recieveMessages(workerOutputQName, 0, 1);
-                for (Message message : messages) {
-                    summaryFile.write(message.body() + '\n');
-                    SQSUtils.deleteMSG(message, workerOutputQName);
-                    leftToRead--;
+                try {
+                    Message message = SQSUtils.recieveMSG(workerOutputQName);
+                    if (message != null) {
+                        summaryFile.write(message.body() + '\n');
+                        SQSUtils.deleteMSG(message, workerOutputQName);
+                        leftToRead--;
+                    }
+                } catch (SqsException sqsEx) {
+                    System.out.println("ManagerRunner.makeAndUploadSummaryFile(): got SqsException " + sqsEx + "\nretrying");
+                    Thread.sleep(1000);
                 }
             }
             summaryFile.close();

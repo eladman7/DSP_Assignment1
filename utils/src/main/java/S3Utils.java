@@ -15,11 +15,9 @@ import java.util.List;
 public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
-//    public static final String PRIVATE_BUCKET = "dsp-private-bucket" + System.currentTimeMillis();
     public static final String PRIVATE_BUCKET = "dsp-helper-bucket";
     public static final String PUBLIC_BUCKET = "dsp-results-bucket";
 
-    // TODO: 08/04/2020 change isPrivate.
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
         uploadFile(fileLocalPath, fileKey, PUBLIC_BUCKET, isPrivate);
         return PUBLIC_BUCKET;

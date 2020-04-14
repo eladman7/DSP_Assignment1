@@ -1,16 +1,20 @@
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class LocalApplication {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         final String localAppId = String.valueOf(System.currentTimeMillis());
         //The name of the input file in resources folder.
         String input_file_path = args[0];
@@ -21,42 +25,48 @@ public class LocalApplication {
         String inputFileKey = "inputFile" + localAppId;
 
         // ---- Upload input file to s3 ----
-
         S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET, true);      // Upload input File to S3
         System.out.println("success upload input file");
 
         // ---- Upload first message to sqs
         String LocalManagerQName = "Local_Manager_Queue";
+        Map<QueueAttributeName,String> attributes = new HashMap<>();
+        attributes.put(QueueAttributeName.VISIBILITY_TIMEOUT, "120");
+        SQSUtils.buildQueueIfNotExists(LocalManagerQName, attributes);
         String fileUrl = getFileUrl(inputFileKey);
         System.out.println("file is here: " + fileUrl);
         SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " + numOfPdfPerWorker);
         System.out.println("success uploading first message to sqs");
 
         // ---- Create Manager Instance
-        if (!EC2Utils.isManagerRunning()) {
-            System.out.println("There is no running manager.. lunch manager");
-            // Run manager JarFile with input : numOfPdfPerWorker.
+        if (!EC2Utils.isInstanceRunning("Manager")) {
+            System.out.println("There is no running manager.. launch manager");
             String managerScript = createManagerUserData();
             EC2Utils.createEc2Instance("Manager", managerScript, 1);
-            System.out.println("Success lunching manager");
+            System.out.println("Success launching manager");
         } else System.out.println("Ec2 manager already running.. ");
 
         // ---- Read SQS summary message from manager
         System.out.println("building manager < -- > local queue");
         String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
-        SQSUtils.BuildQueueIfNotExists(ManagerLocalQName);
+        SQSUtils.buildQueueIfNotExists(ManagerLocalQName);
 
         // receive messages from the queue, if empty? (maybe busy wait?)
         System.out.println("waiting for a summary file from manager..");
         String summaryMessage;
         Message sMessage;
-        //busy wait..
         while (true) {
-            sMessage = SQSUtils.recieveMSG(ManagerLocalQName);
-            if (sMessage != null) {
-                summaryMessage = sMessage.body();
-                if (summaryMessage != null)
-                    break;
+            try {
+                sMessage = SQSUtils.recieveMSG(ManagerLocalQName);
+                if (sMessage != null) {
+                    summaryMessage = sMessage.body();
+                    if (summaryMessage != null)
+                        break;
+                }
+            } catch (SqsException sqsExecption) {
+                System.out.println("LocalApplication.main(): got SqsException... " + sqsExecption.getMessage() +
+                        "\nretrying!");
+                Thread.sleep(1000);
             }
         }
         SQSUtils.deleteMSG(sMessage, ManagerLocalQName);

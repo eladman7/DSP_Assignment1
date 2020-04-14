@@ -1,23 +1,35 @@
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 
 import java.io.IOException;
 
 public class Worker {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         String inputQName = args[0];
         String outputQNamePrefix = args[1];
         String outputQName;
         while (true) {
-            Message message = SQSUtils.recieveMSG(inputQName);
-            if (message != null) {
-                if (message.body().toLowerCase().equals("terminate")) {
-                    System.out.println("worker: shutting down... goodbye");
-                    break;
+            try {
+
+                Message message = SQSUtils.recieveMSG(inputQName);
+                if (message != null) {
+                    if (message.body().toLowerCase().equals("terminate")) {
+                        System.out.println("worker: shutting down... goodbye");
+                        break;
+                    }
+                    System.out.println(message.body());
+                    outputQName = outputQNamePrefix + extractOutQName(message);
+                    handleNewPDFTask(message, outputQName, inputQName);
                 }
-                System.out.println(message.body());
-                outputQName = outputQNamePrefix + extractOutQName(message);
-                handleNewPDFTask(message, outputQName, inputQName);
+            } catch (SqsException sqsExecption) {
+                System.out.println("Worker.main(): got SqsException... " + sqsExecption.getMessage() +
+                        "\nretrying!");
+                Thread.sleep(1000);
+            } catch (SdkClientException sdkException) {
+                System.out.println("Worker.main(): got SdkClientException... exiting!");
+                System.exit(1);
             }
         }
     }
