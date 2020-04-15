@@ -1,3 +1,4 @@
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SqsException;
@@ -59,7 +60,7 @@ public class LocalApplication {
                     if (summaryMessage != null)
                         break;
                 }
-            } catch (SqsException sqsExecption) {
+            } catch (SqsException | SdkClientException sqsExecption) {
                 System.out.println("LocalApplication.main(): got SqsException... " + sqsExecption.getMessage() +
                         "\nretrying!");
                 Thread.sleep(1000);
@@ -83,7 +84,7 @@ public class LocalApplication {
 
 
     private static void makeSummaryFile(String fileName, String outputFileName) throws IOException {
-        System.out.println("Start making summary file.");
+        System.out.println("Start making output file.");
         BufferedReader reader;
         String line;
         String op, inputLink, rest;
@@ -125,11 +126,11 @@ public class LocalApplication {
     private static String createManagerUserData() {
         String fileKey = "managerapp";
         System.out.println("Uploading manager jar..");
-        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
+        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
                 fileKey, S3Utils.PRIVATE_BUCKET, false);
 
         System.out.println("Uploading worker jar..");
-        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
+        S3Utils.uploadFile("out/artifacts/Worker_jar/Worker.jar",
                 "workerapp", S3Utils.PRIVATE_BUCKET, false);
         System.out.println("Finish upload jars.");
 

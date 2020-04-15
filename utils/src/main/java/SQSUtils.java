@@ -72,9 +72,17 @@ public class SQSUtils {
     }
 
     private static void createQByName(String queueName, Map<QueueAttributeName, String> attrMap) {
-        CreateQueueRequest request = CreateQueueRequest.builder()
-                .queueName(queueName)
-                .build();
+        CreateQueueRequest request;
+        if (!CollectionUtils.isNullOrEmpty(attrMap)) {
+            request = CreateQueueRequest.builder()
+                    .queueName(queueName)
+                    .attributes(attrMap)
+                    .build();
+        } else {
+            request = CreateQueueRequest.builder()
+                    .queueName(queueName)
+                    .build();
+        }
         try {
             CreateQueueResponse create_result = sqs.createQueue(request);
         } catch (QueueNameExistsException qExistsEx) {
@@ -86,16 +94,6 @@ public class SQSUtils {
                 sqs.createQueue(request);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            }
-        } finally {
-            if (!CollectionUtils.isNullOrEmpty(attrMap)) {
-                try {
-                    sqs.setQueueAttributes(SetQueueAttributesRequest.builder()
-                            .attributes(attrMap)
-                            .build());
-                } catch (InvalidAttributeNameException invAttrEx) {
-                    System.out.println("SQSUtils.createQByName(): failed... " + invAttrEx.getMessage());
-                }
             }
         }
     }

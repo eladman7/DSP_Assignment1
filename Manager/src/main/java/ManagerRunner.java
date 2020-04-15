@@ -1,3 +1,4 @@
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.ec2.model.Ec2Exception;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.SqsException;
@@ -129,7 +130,7 @@ public class ManagerRunner implements Runnable {
                         SQSUtils.deleteMSG(message, workerOutputQName);
                         leftToRead--;
                     }
-                } catch (SqsException sqsEx) {
+                } catch (SqsException | SdkClientException sqsEx) {
                     System.out.println("ManagerRunner.makeAndUploadSummaryFile(): got SqsException " + sqsEx + "\nretrying");
                     Thread.sleep(1000);
                 }

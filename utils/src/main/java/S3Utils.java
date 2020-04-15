@@ -15,22 +15,22 @@ import java.util.List;
 public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
-    public static final String PRIVATE_BUCKET = "dsp-helper-bucket";
-    public static final String PUBLIC_BUCKET = "dsp-results-bucket";
+    public static final String PRIVATE_BUCKET = "eladbucket";
+    public static final String PUBLIC_BUCKET = "elad2bucket";
 
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
-        uploadFile(fileLocalPath, fileKey, PUBLIC_BUCKET, isPrivate);
+        uploadFile(fileLocalPath, fileKey, PUBLIC_BUCKET, false);
         return PUBLIC_BUCKET;
     }
 
     public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
         File input_file = new File(fileLocalPath);
-        uploadInputFile(input_file, bucketName, fileKey, isPrivate);
+        uploadInputFile(input_file, bucketName, fileKey, false);
         return true;
     }
 
     public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
-        multipartUpload(fileLocalPath, fileKey, bucketName, isPrivate);
+        multipartUpload(fileLocalPath, fileKey, bucketName, false);
         return true;
     }
 
@@ -42,7 +42,6 @@ public class S3Utils {
 
     /**
      * Upload first Input file to S3
-     *
      */
     private static void uploadInputFile(File input_file, String bucket, String key, boolean isPrivate) {
         try {
