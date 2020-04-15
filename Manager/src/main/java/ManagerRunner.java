@@ -62,21 +62,25 @@ public class ManagerRunner implements Runnable {
     //Local App should wait for other before lunching Workers.
     public synchronized static void launchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
         try {
+            if (messageCount == 0) {
+                System.out.println("got 0 message count! should never happen!");
+                return;
+            }
             int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
-            // numOfWorkers = // Number of new workers the job require.
-            int numOfWorkers;
-            if (numOfRunningWorkers == 0) {
-                // TODO: 11/04/2020 what if messageCount is smaller than numOfMsfPerWorker?
-                numOfWorkers = messageCount / numOfMsgForWorker;
-            } else numOfWorkers = (messageCount / numOfMsgForWorker) - numOfRunningWorkers;
-
+            // numOfNewWorkers = // Number of new workers the job require.
+            int numOfNewWorkers = (messageCount <= numOfMsgForWorker) ? 1 : messageCount / numOfMsgForWorker;
+            if (numOfRunningWorkers > 0) {
+                numOfNewWorkers = (numOfNewWorkers <= numOfRunningWorkers) ? 0 :
+                        numOfNewWorkers - numOfRunningWorkers;
+                System.out.println("Number of running workers: " + numOfRunningWorkers + " requested workers: " +
+                        numOfNewWorkers + ". No new workers will be launched!");
+            }
+            if (numOfNewWorkers == 0) return;
             //assert there are no more than 10 workers running.
-            if (numOfWorkers + numOfRunningWorkers <= 9) {
-                if (numOfWorkers > 0)
-                    bootstrapWorkers(numOfWorkers, tasksQName, workerOutputQName);
-            } else {
-                if (numOfRunningWorkers < 9)
-                    bootstrapWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
+            if (numOfNewWorkers + numOfRunningWorkers <= 9) {
+                bootstrapWorkers(numOfNewWorkers, tasksQName, workerOutputQName);
+            } else if (numOfRunningWorkers < 9) {
+                bootstrapWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
             }
         } catch (Ec2Exception ec2Ex) {
             System.out.println("ManagerRunner.launchWorkers(): got Ec2Exception... " + ec2Ex.getMessage());
