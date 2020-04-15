@@ -36,7 +36,7 @@ public class ManagerRunner implements Runnable {
         //download input file, Save under "inputFile.txt"
         S3Utils.getObjectToLocal(inputKey, inputBucket, "inputFile" + id + ".txt");
         // Create SQS message for each url in the input file.
-        List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
+        List<String> tasks = createWorkerTasks("inputFile" + id + ".txt");
         // Build Workers output Q
         SQSUtils.buildQueueIfNotExists(workerOutputQName);
         System.out.println("build Workers outputQ succeed");
@@ -131,7 +131,8 @@ public class ManagerRunner implements Runnable {
                         leftToRead--;
                     }
                 } catch (SqsException | SdkClientException sqsEx) {
-                    System.out.println("ManagerRunner.makeAndUploadSummaryFile(): got SqsException " + sqsEx + "\nretrying");
+                    System.out.println("ManagerRunner.makeAndUploadSummaryFile(): got SqsException "
+                            + sqsEx.getMessage() + "\nsleeping & retrying");
                     Thread.sleep(1000);
                 }
             }
@@ -181,7 +182,7 @@ public class ManagerRunner implements Runnable {
      * @param filename file name
      * @return List of all the messages from the pdf file, which we get by sqs.
      */
-    public List<String> createSqsMessages(String filename) {
+    public List<String> createWorkerTasks(String filename) {
         List<String> tasks = new LinkedList<>();
         BufferedReader reader;
         String line;

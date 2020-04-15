@@ -62,7 +62,7 @@ public class LocalApplication {
                 }
             } catch (SqsException | SdkClientException sqsExecption) {
                 System.out.println("LocalApplication.main(): got SqsException... " + sqsExecption.getMessage() +
-                        "\nretrying!");
+                        "\nsleeping & retrying!");
                 Thread.sleep(1000);
             }
         }

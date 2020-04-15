@@ -23,13 +23,10 @@ public class Worker {
                     outputQName = outputQNamePrefix + extractOutQName(message);
                     handleNewPDFTask(message, outputQName, inputQName);
                 }
-            } catch (SqsException sqsExecption) {
+            } catch (SqsException | SdkClientException sqsExecption) {
                 System.out.println("Worker.main(): got SqsException... " + sqsExecption.getMessage() +
-                        "\nretrying!");
+                        "\nsleeping & retrying!");
                 Thread.sleep(1000);
-            } catch (SdkClientException sdkException) {
-                System.out.println("Worker.main(): got SdkClientException... exiting!");
-                System.exit(1);
             }
         }
     }
