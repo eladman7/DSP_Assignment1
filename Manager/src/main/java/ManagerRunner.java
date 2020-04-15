@@ -33,42 +33,28 @@ public class ManagerRunner implements Runnable {
         String inputBucket = extractBucket(inputMessage);
         String inputKey = extractKey(inputMessage);
         //download input file, Save under "inputFile.txt"
-        try {
-            S3Utils.getObjectToLocal(inputKey, inputBucket, "inputFile" + id + ".txt");
-        } catch (Exception getObj) {
-            System.out.println(getObj.getMessage());
-        } finally {
-
-            // Create SQS message for each url in the input file.
-            List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
-
-            // Build Workers output Q
-            SQSUtils.buildQueueIfNotExists(workerOutputQName);
-            System.out.println("build Workers outputQ succeed");
-
-
-            int messageCount = tasks.size();
-            System.out.println("numOfMessages: " + messageCount);
-
-            // Delegate Tasks to workers.
-            for (String task : tasks) {
-                System.out.println("task: " + task);
-                SQSUtils.sendMSG(tasksQName, task + " " + id);
-            }
-            System.out.println("Delegated all tasks to workers, now waiting for them to finish..");
-
-            System.out.println("Lunching Workers..");
-            launchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
-            System.out.println("Finished lunching workers process.");
-
-            System.out.println("Start making summary file.. ");
-            makeAndUploadSummaryFile(messageCount);
-
-            System.out.println("finish make and upload summary file");
-            System.out.println("deleting file.. ");
-
-            System.out.println("ManagerRunner with id: " + id + " exited!");
+        S3Utils.getObjectToLocal(inputKey, inputBucket, "inputFile" + id + ".txt");
+        // Create SQS message for each url in the input file.
+        List<String> tasks = createSqsMessages("inputFile" + id + ".txt");
+        // Build Workers output Q
+        SQSUtils.buildQueueIfNotExists(workerOutputQName);
+        System.out.println("build Workers outputQ succeed");
+        int messageCount = tasks.size();
+        System.out.println("numOfMessages: " + messageCount);
+        // Delegate Tasks to workers.
+        for (String task : tasks) {
+            System.out.println("task: " + task);
+            SQSUtils.sendMSG(tasksQName, task + " " + id);
         }
+        System.out.println("Delegated all tasks to workers, now waiting for them to finish..");
+        System.out.println("Lunching Workers..");
+        launchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
+        System.out.println("Finished lunching workers process.");
+        System.out.println("Start making summary file.. ");
+        makeAndUploadSummaryFile(messageCount);
+        System.out.println("finish make and upload summary file");
+        System.out.println("deleting file.. ");
+        System.out.println("ManagerRunner with id: " + id + " exited!");
     }
 
 

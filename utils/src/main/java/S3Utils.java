@@ -34,6 +34,7 @@ public class S3Utils {
         return true;
     }
 
+    //todo: elad maybe add retry
     public static void getObjectToLocal(String fileKey, String bucket, String localFilePath) {
         s3.getObject(GetObjectRequest.builder().bucket(bucket).key(fileKey).build(),
                 ResponseTransformer.toFile(Paths.get(localFilePath)));
@@ -46,7 +47,7 @@ public class S3Utils {
     private static void uploadInputFile(File input_file, String bucket, String key, boolean isPrivate) {
         try {
             createBucket(bucket, isPrivate);
-        } catch (BucketAlreadyExistsException ignored) {
+        } catch (BucketAlreadyExistsException | BucketAlreadyOwnedByYouException ignored) {
             System.out.println("bucket with name: " + bucket + " already exists!");
         }
         if (!isPrivate)

@@ -14,14 +14,12 @@ import java.util.regex.Pattern;
 
 public class LocalApplication {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, IOException {
         final String localAppId = String.valueOf(System.currentTimeMillis());
-        //The name of the input file in resources folder.
-        String input_file_path = args[0];
-        String output_file_name = args[1];
-        int numOfPdfPerWorker = Integer.parseInt(args[2]);
-        boolean terminate = args.length > 3 && "terminate".equals(args[3]);
-
+        String input_file_path = args[0]; // input file path
+        String output_file_name = args[1]; // output file path
+        int numOfPdfPerWorker = Integer.parseInt(args[2]); // n - work per worker
+        boolean terminate = args.length == 4 && Boolean.parseBoolean(args[3]); // terminate?
         String inputFileKey = "inputFile" + localAppId;
 
         // ---- Upload input file to s3 ----
@@ -30,7 +28,7 @@ public class LocalApplication {
 
         // ---- Upload first message to sqs
         String LocalManagerQName = "Local_Manager_Queue";
-        Map<QueueAttributeName,String> attributes = new HashMap<>();
+        Map<QueueAttributeName, String> attributes = new HashMap<>();
         attributes.put(QueueAttributeName.VISIBILITY_TIMEOUT, "120");
         SQSUtils.buildQueueIfNotExists(LocalManagerQName, attributes);
         String fileUrl = getFileUrl(inputFileKey);
@@ -50,8 +48,6 @@ public class LocalApplication {
         System.out.println("building manager < -- > local queue");
         String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
         SQSUtils.buildQueueIfNotExists(ManagerLocalQName);
-
-        // receive messages from the queue, if empty? (maybe busy wait?)
         System.out.println("waiting for a summary file from manager..");
         String summaryMessage;
         Message sMessage;
@@ -71,25 +67,17 @@ public class LocalApplication {
         }
         SQSUtils.deleteMSG(sMessage, ManagerLocalQName);
         System.out.println("local app gets its summary file.. download and sent termination message if needed");
-
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
-        try {
-            S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + localAppId + ".txt");
-
-            makeSummaryFile("summaryFile" + localAppId + ".txt", output_file_name);
-        } catch (Exception getObjException) {
-            System.out.println(getObjException.getMessage());
-            //send termination message if needed
-        } finally {
-            //We want to delete this special local app Q any way when finish.
-            System.out.println("deleting LA Q's");
-            deleteLocalAppQueues(localAppId);
-            if (terminate) {
-                SQSUtils.sendMSG(LocalManagerQName, "terminate");
-                System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
-            }
+        S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + localAppId + ".txt");
+        makeSummaryFile("summaryFile" + localAppId + ".txt", output_file_name);
+        //We want to delete this special local app Q any way when finish.
+        System.out.println("deleting LA Q's");
+        deleteLocalAppQueues(localAppId);
+        if (terminate) {
+            SQSUtils.sendMSG(LocalManagerQName, "terminate");
+            System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
         }
     }
 
