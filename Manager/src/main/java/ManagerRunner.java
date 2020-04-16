@@ -3,10 +3,7 @@ import software.amazon.awssdk.services.ec2.model.Ec2Exception;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.SqsException;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -27,7 +24,6 @@ public class ManagerRunner implements Runnable {
         this.workerOutputQName = workerOutputQ + id;
 
     }
-// TODO: 13/04/2020 Add delete files.
 
     @Override
     public void run() {
@@ -54,7 +50,6 @@ public class ManagerRunner implements Runnable {
         System.out.println("Start making summary file.. ");
         makeAndUploadSummaryFile(messageCount);
         System.out.println("finish make and upload summary file");
-        System.out.println("deleting file.. ");
         System.out.println("ManagerRunner with id: " + id + " exited!");
     }
 
@@ -148,10 +143,22 @@ public class ManagerRunner implements Runnable {
             System.out.println("finish uploading file..put message in sqs ");
             SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("summaryFile"));
 
+
         } catch (Exception ex) {
             System.out.println("ManagerRunner failed to create final summary file. stop running!");
             System.out.println(ex.toString());
         }
+            //delete file
+            File file = new File("summaryFile" + id + ".txt");
+            if(file.delete())
+            {
+                System.out.println("File deleted successfully");
+            }
+            else
+            {
+                System.out.println("Failed to delete the file");
+            }
+
     }
 
 

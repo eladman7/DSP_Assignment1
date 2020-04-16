@@ -18,4 +18,3 @@ ToImage	http://www.wildfirerestaurant.com/sites/default/files/F%20Passover%20Clu
 ToImage	http://www.chosengarden.com/images/Menu-Passover.pdf
 ToHTML	http://www.godandscience.org/apologetics/haggadah.pdf
 ToImage	http://www.golombeckspice.com/resources_content/Passover%20and%20Spices.pdf
-ToText	http://www.bgemc.org/2014_Pesach_Information_Booking_sheet.pdf

@@ -126,11 +126,11 @@ public class LocalApplication {
     private static String createManagerUserData() {
         String fileKey = "managerapp";
         System.out.println("Uploading manager jar..");
-        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
+        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
                 fileKey, S3Utils.PRIVATE_BUCKET, false);
 
         System.out.println("Uploading worker jar..");
-        S3Utils.uploadFile("out/artifacts/Worker_jar/Worker.jar",
+        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
                 "workerapp", S3Utils.PRIVATE_BUCKET, false);
         System.out.println("Finish upload jars.");
 

@@ -15,8 +15,8 @@ import java.util.List;
 public class S3Utils {
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
-    public static final String PRIVATE_BUCKET = "eladbucket";
-    public static final String PUBLIC_BUCKET = "elad2bucket";
+    public static final String PRIVATE_BUCKET = "dsp-helper-bucket";
+    public static final String PUBLIC_BUCKET = "dsp-results-bucket";
 
     public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
         uploadFile(fileLocalPath, fileKey, PUBLIC_BUCKET, false);
@@ -50,24 +50,14 @@ public class S3Utils {
             System.out.println("bucket with name: " + bucket + " already exists!");
         }
         if (!isPrivate)
-            s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ_WRITE).bucket(bucket).key(key).build(),
+            s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ).bucket(bucket).key(key).build(),
                     RequestBody.fromFile(input_file));
         else
-            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+            s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PRIVATE).bucket(bucket).key(key).build(),
                     RequestBody.fromFile(input_file));
     }
 
     private static void createBucket(String bucketName, boolean isPrivate) {
-        if (!isPrivate) {
-            s3.createBucket(CreateBucketRequest
-                    .builder()
-                    .acl(BucketCannedACL.PUBLIC_READ_WRITE)
-                    .bucket(bucketName)
-                    .createBucketConfiguration(
-                            CreateBucketConfiguration.builder()
-                                    .build())
-                    .build());
-        } else
             s3.createBucket(CreateBucketRequest
                     .builder()
                     .acl(BucketCannedACL.PRIVATE)

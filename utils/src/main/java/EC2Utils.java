@@ -95,7 +95,7 @@ public class EC2Utils {
      * Terminate all running ec2 instances
      */
     public static void terminateEc2Instances() {
-        //todo: ask bar - if manager call this- doesnt it kills himself also?
+        //todo: ask bar - if manager call this- doesnt it kills himself also? as it should.!
         String nextToken = null;
         do {
             DescribeInstancesRequest dRequest = DescribeInstancesRequest.builder().nextToken(nextToken).build();
