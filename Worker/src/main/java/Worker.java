@@ -1,3 +1,5 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.SqsException;
@@ -5,6 +7,7 @@ import software.amazon.awssdk.services.sqs.model.SqsException;
 import java.io.IOException;
 
 public class Worker {
+    private final static Logger log = LoggerFactory.getLogger(Worker.class);
 
     public static void main(String[] args) throws InterruptedException {
         String inputQName = args[0];
@@ -16,15 +19,16 @@ public class Worker {
                 Message message = SQSUtils.recieveMSG(inputQName);
                 if (message != null) {
                     if (message.body().toLowerCase().equals("terminate")) {
-                        System.out.println("worker: shutting down... goodbye");
+                        log.info("worker: shutting down... goodbye");
                         break;
                     }
-                    System.out.println(message.body());
-                    outputQName = outputQNamePrefix + extractOutQName(message);
-                    handleNewPDFTask(message, outputQName, inputQName);
+                    log.debug(message.body());
+                    String appId = extractOutQName(message);
+                    outputQName = outputQNamePrefix + appId;
+                    handleNewPDFTask(message, outputQName, inputQName, appId);
                 }
             } catch (SqsException | SdkClientException sqsExecption) {
-                System.out.println("Worker.main(): got SqsException... " + sqsExecption.getMessage() +
+                log.error("Worker.main(): got SqsException... " + sqsExecption.getMessage() +
                         "\nsleeping & retrying!");
                 Thread.sleep(1000);
             }
@@ -45,16 +49,16 @@ public class Worker {
      * @param outputQName
      * @param inputQName
      */
-    private static void handleNewPDFTask(Message message, String outputQName, String inputQName) {
+    private static void handleNewPDFTask(Message message, String outputQName, String inputQName, String appId) {
         String[] operationUrlPair = message.body().split("\\s+");
         String operationName = operationUrlPair[0].toUpperCase();
         String pdfS3PathToProcess = operationUrlPair[1];
-        System.out.println("worker: message body - operation name: " + operationName + ", pdf url:  " + pdfS3PathToProcess);
+        log.debug("worker: message body - operation name: " + operationName + ", pdf url:  " + pdfS3PathToProcess);
         String outFilePath;
         try {
             outFilePath = processOperation(operationName, pdfS3PathToProcess);
-            String fileKey = "output" + String.valueOf(System.currentTimeMillis());
-            String bucket = S3Utils.uploadFile(outFilePath, fileKey, false);
+            String fileKey = appId + "/" + "output" + String.valueOf(System.currentTimeMillis());
+            String bucket = S3Utils.uploadFile(outFilePath, fileKey);
             String remoteOutputURL = "https://" + bucket + ".s3.amazonaws.com/" + fileKey;
             SQSUtils.sendMSG(outputQName, buildCompletedMessage(operationName, pdfS3PathToProcess, remoteOutputURL));
         } catch (Exception e) {
@@ -86,8 +90,7 @@ public class Worker {
     }
 
     private static void handleFailure(Exception e, String inputFile, String opName, String outQName) {
-        System.out.println("inside Worker.handleFailure()");
-        System.out.println("Failure: " + e);
+        log.warn("Failure: " + e);
         SQSUtils.sendMSG(outQName, buildFailedMessage(e, inputFile, opName));
     }
 }

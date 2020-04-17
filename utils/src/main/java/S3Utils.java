@@ -1,3 +1,5 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
@@ -13,24 +15,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class S3Utils {
+    private final static Logger log = LoggerFactory.getLogger(S3Utils.class);
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
-    public static final String PRIVATE_BUCKET = "dsp-helper-bucket";
-    public static final String PUBLIC_BUCKET = "dsp-results-bucket";
+    public static final String PRIVATE_BUCKET = "bucket" + System.currentTimeMillis();
 
-    public static String uploadFile(String fileLocalPath, String fileKey, boolean isPrivate) {
-        uploadFile(fileLocalPath, fileKey, PUBLIC_BUCKET, false);
-        return PUBLIC_BUCKET;
+    public static String uploadFile(String fileLocalPath, String fileKey) {
+        uploadFile(fileLocalPath, fileKey, PRIVATE_BUCKET);
+        return PRIVATE_BUCKET;
     }
 
-    public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
+    public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName) {
         File input_file = new File(fileLocalPath);
-        uploadInputFile(input_file, bucketName, fileKey, false);
+        uploadInputFile(input_file, bucketName, fileKey);
         return true;
     }
 
-    public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName, boolean isPrivate) {
-        multipartUpload(fileLocalPath, fileKey, bucketName, false);
+    public static boolean uploadLargeFile(String fileLocalPath, String fileKey, String bucketName) {
+        multipartUpload(fileLocalPath, fileKey, bucketName);
         return true;
     }
 
@@ -43,33 +45,33 @@ public class S3Utils {
     /**
      * Upload first Input file to S3
      */
-    private static void uploadInputFile(File input_file, String bucket, String key, boolean isPrivate) {
+    private static void uploadInputFile(File input_file, String bucket, String key) {
         try {
-            createBucket(bucket, isPrivate);
+            createBucket(bucket);
         } catch (BucketAlreadyExistsException | BucketAlreadyOwnedByYouException ignored) {
-            System.out.println("bucket with name: " + bucket + " already exists!");
+            log.debug("bucket with name: " + bucket + " already exists!");
         }
-        if (!isPrivate)
-            s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PUBLIC_READ).bucket(bucket).key(key).build(),
-                    RequestBody.fromFile(input_file));
-        else
-            s3.putObject(PutObjectRequest.builder().acl(ObjectCannedACL.PRIVATE).bucket(bucket).key(key).build(),
-                    RequestBody.fromFile(input_file));
+        s3.putObject(PutObjectRequest.builder()
+                        .bucket(bucket)
+                        .acl(ObjectCannedACL.PUBLIC_READ_WRITE)
+                        .key(key)
+                        .build(),
+                RequestBody.fromFile(input_file));
     }
 
-    private static void createBucket(String bucketName, boolean isPrivate) {
-            s3.createBucket(CreateBucketRequest
-                    .builder()
-                    .acl(BucketCannedACL.PRIVATE)
-                    .bucket(bucketName)
-                    .createBucketConfiguration(
-                            CreateBucketConfiguration.builder()
-                                    .build())
-                    .build());
+    private static void createBucket(String bucketName) {
+        s3.createBucket(CreateBucketRequest
+                .builder()
+                .acl(BucketCannedACL.PUBLIC_READ_WRITE)
+                .bucket(bucketName)
+                .createBucketConfiguration(
+                        CreateBucketConfiguration.builder()
+                                .build())
+                .build());
     }
 
-    private static void multipartUpload(String filePath, String keyName, String bucketName, boolean isPrivate) {
-        createBucket(bucketName, isPrivate);
+    private static void multipartUpload(String filePath, String keyName, String bucketName) {
+        createBucket(bucketName);
         File file = new File(filePath);
         long contentLength = file.length();
         long partSize = 5 * 1024 * 1024; // Set part size to 5 MB.
@@ -81,27 +83,20 @@ public class S3Utils {
             List<CompletedPart> completedParts = new ArrayList<>();
             CreateMultipartUploadRequest createMultipartUploadRequest;
             // Initiate the multipart upload.
-            if (!isPrivate)
-                createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
-                        .bucket(bucketName)
-                        .key(keyName)
-                        .acl(ObjectCannedACL.PUBLIC_READ_WRITE)
-                        .build();
-            else
-                createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
-                        .bucket(bucketName)
-                        .key(keyName)
-                        .build();
+            createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+                    .bucket(bucketName)
+                    .key(keyName)
+                    .build();
             CreateMultipartUploadResponse response = s3.createMultipartUpload(createMultipartUploadRequest);
             String uploadId = response.uploadId();
-            System.out.println(uploadId);
+            log.debug(uploadId);
 
             // Upload the file parts.
             long filePosition = 0;
-            System.out.println("content length: " + contentLength);
+            log.debug("content length: " + contentLength);
             for (int i = 1; filePosition < contentLength; i++) {
-                System.out.println("uploading part: " + i);
-                System.out.println("file pos: " + filePosition);
+                log.debug("uploading part: " + i);
+                log.debug("file pos: " + filePosition);
                 // Because the last part could be less than 5 MB, adjust the part size as needed.
                 partSize = Math.min(partSize, (contentLength - filePosition));
 

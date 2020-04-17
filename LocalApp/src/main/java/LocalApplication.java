@@ -1,3 +1,5 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
@@ -14,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class LocalApplication {
+    private final static Logger log = LoggerFactory.getLogger(LocalApplication.class);
 
     public static void main(String[] args) throws InterruptedException, IOException {
         final String localAppId = String.valueOf(System.currentTimeMillis());
@@ -21,35 +24,34 @@ public class LocalApplication {
         String output_file_name = args[1]; // output file path
         int numOfPdfPerWorker = Integer.parseInt(args[2]); // n - work per worker
         boolean terminate = args.length == 4 && Boolean.parseBoolean(args[3]); // terminate?
-        String inputFileKey = "inputFile" + localAppId;
+        String inputFileKey = localAppId + "/" + "inputFile" + localAppId;
 
         // ---- Upload input file to s3 ----
-        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET, true);      // Upload input File to S3
-        System.out.println("success upload input file");
+        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET);      // Upload input File to S3
+        String fileUrl = getFileUrl(inputFileKey);
+        log.info("Input file successfully uploaded here: {}", fileUrl);
 
         // ---- Upload first message to sqs
         String LocalManagerQName = "Local_Manager_Queue";
         Map<QueueAttributeName, String> attributes = new HashMap<>();
         attributes.put(QueueAttributeName.VISIBILITY_TIMEOUT, "120");
         SQSUtils.buildQueueIfNotExists(LocalManagerQName, attributes);
-        String fileUrl = getFileUrl(inputFileKey);
-        System.out.println("file is here: " + fileUrl);
         SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " + numOfPdfPerWorker);
-        System.out.println("success uploading first message to sqs");
+        log.info("New task message successfully sent");
 
         // ---- Create Manager Instance
         if (!EC2Utils.isInstanceRunning("Manager")) {
-            System.out.println("There is no running manager.. launch manager");
+            log.debug("There is no running manager.. launch manager");
             String managerScript = createManagerUserData();
             EC2Utils.createEc2Instance("Manager", managerScript, 1);
-            System.out.println("Success launching manager");
-        } else System.out.println("Ec2 manager already running.. ");
+            log.info("Manager launched successfully");
+        } else log.debug("Ec2 manager already running.. ");
 
         // ---- Read SQS summary message from manager
-        System.out.println("building manager < -- > local queue");
+        log.debug("building manager < -- > local queue");
         String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
         SQSUtils.buildQueueIfNotExists(ManagerLocalQName);
-        System.out.println("waiting for a summary file from manager..");
+        log.info("Waiting for a summary...");
         String summaryMessage;
         Message sMessage;
         while (true) {
@@ -61,30 +63,31 @@ public class LocalApplication {
                         break;
                 }
             } catch (SqsException | SdkClientException sqsExecption) {
-                System.out.println("LocalApplication.main(): got SqsException... " + sqsExecption.getMessage() +
+                log.error("LocalApplication.main(): got SqsException... " + sqsExecption.getMessage() +
                         "\nsleeping & retrying!");
                 Thread.sleep(1000);
             }
         }
         SQSUtils.deleteMSG(sMessage, ManagerLocalQName);
-        System.out.println("local app gets its summary file.. download and sent termination message if needed");
+        log.info("Got summary file. Creating output file");
         //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
         S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + localAppId + ".txt");
-        makeSummaryFile("summaryFile" + localAppId + ".txt", output_file_name);
+        makeOutputFile("summaryFile" + localAppId + ".txt", output_file_name);
         //We want to delete this special local app Q any way when finish.
-        System.out.println("deleting LA Q's");
+        log.debug("deleting LA Q's");
         deleteLocalAppQueues(localAppId);
         if (terminate) {
             SQSUtils.sendMSG(LocalManagerQName, "terminate");
-            System.out.println("Local sent terminate message and finish..deleting local Q's.. Bye");
+            log.debug("Local sent terminate message and finish..deleting local Q's.. Bye");
         }
+        log.info("Done");
     }
 
 
-    private static void makeSummaryFile(String fileName, String outputFileName) throws IOException {
-        System.out.println("Start making output file.");
+    private static void makeOutputFile(String fileName, String outputFileName) throws IOException {
+        log.debug("Start making output file.");
         BufferedReader reader;
         String line;
         String op, inputLink, rest;
@@ -98,7 +101,7 @@ public class LocalApplication {
             inputLink = resLine[1];
             rest = String.join(" ", Arrays.copyOfRange(resLine, 2, resLine.length));
 
-            if (conversionSucceeded(rest, S3Utils.PUBLIC_BUCKET)) {
+            if (conversionSucceeded(rest, S3Utils.PRIVATE_BUCKET)) {
                 summaryFile.write("<p>" + op + " " + inputLink + " " + "<a href=" + rest + ">" + rest + "</a></p>\n");
             } else {
                 summaryFile.write("<p>" + op + " " + inputLink + " " + rest + "</p>\n");
@@ -111,7 +114,7 @@ public class LocalApplication {
         summaryFile.close();
         summaryFile.close();
         reader.close();
-        System.out.println("Finish making summary file.");
+        log.debug("Finish making summary file.");
 
     }
 
@@ -124,21 +127,21 @@ public class LocalApplication {
     }
 
     private static String createManagerUserData() {
-        String fileKey = "managerapp";
-        System.out.println("Uploading manager jar..");
-        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Manager_jar/Manager.jar",
-                fileKey, S3Utils.PRIVATE_BUCKET, false);
+        String fileKey = "jars/managerapp";
+        log.info("Uploading manager jar..");
+        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
+                fileKey, S3Utils.PRIVATE_BUCKET);
 
-        System.out.println("Uploading worker jar..");
-        S3Utils.uploadFile("/home/bar/IdeaProjects/Assignment1/out/artifacts/Worker_jar/Worker.jar",
-                "workerapp", S3Utils.PRIVATE_BUCKET, false);
-        System.out.println("Finish upload jars.");
+        log.info("Uploading worker jar..");
+        S3Utils.uploadFile("out/artifacts/Worker_jar/Worker.jar",
+                "jars/workerapp", S3Utils.PRIVATE_BUCKET);
+        log.info("Finish upload jars.");
 
         String s3Path = "https://" + S3Utils.PRIVATE_BUCKET + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
                 + "wget " + s3Path + " -O /home/ec2-user/Manager.jar\n" +
                 "java -jar /home/ec2-user/Manager.jar " + "\n";
-        System.out.println("user data: " + script);
+        log.debug("user data: " + script);
         return script;
     }
 

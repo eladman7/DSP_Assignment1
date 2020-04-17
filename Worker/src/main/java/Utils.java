@@ -7,6 +7,8 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.tools.PDFText2HTML;
 import org.apache.pdfbox.tools.imageio.ImageIOUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -20,6 +22,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 public class Utils {
+    private final static Logger log = LoggerFactory.getLogger(Utils.class);
 
     private static final String LOCAL_COPY_NAME = "local_copy";
     private static final String LOCAL_PDF_NAME = LOCAL_COPY_NAME + ".pdf";
@@ -42,7 +45,7 @@ public class Utils {
     }
 
     public static String convertPdfToImage(String url) throws IOException {
-        System.out.println("inside Utils.convertPdfToImage()");
+        log.debug("inside Utils.convertPdfToImage()");
         downloadRemoteFile(url);
         PDDocument document = PDDocument.load(new File(LOCAL_PDF_NAME));
         PDFRenderer pdfRenderer = new PDFRenderer(document);
@@ -56,7 +59,7 @@ public class Utils {
     }
 
     public static String convertPdfToText(String url) throws IOException {
-        System.out.println("inside Utils.convertPdfToText()");
+        log.debug("inside Utils.convertPdfToText()");
         downloadRemoteFile(url);
         File file = new File(LOCAL_PDF_NAME);
         String text;
@@ -74,7 +77,7 @@ public class Utils {
     }
 
     public static String convertPdfToHtml(String url) throws IOException {
-        System.out.println("inside Utils.convertPdfToHtml()");
+        log.debug("inside Utils.convertPdfToHtml()");
         downloadRemoteFile(url);
         PDDocument pdDocument = PDDocument.load(new File(LOCAL_PDF_NAME));
         PDFText2HTML textStripper = new PDFText2HTML();

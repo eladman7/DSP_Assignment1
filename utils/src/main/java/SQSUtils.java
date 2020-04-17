@@ -1,3 +1,5 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
@@ -7,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 public class SQSUtils {
+    private final static Logger log = LoggerFactory.getLogger(SQSUtils.class);
     private final static SqsClient sqs = SqsClient.builder().region(Region.US_EAST_1).build();
 
     public static void sendMSG(String qName, String messageBody) {
@@ -59,7 +62,7 @@ public class SQSUtils {
         try {
             sqs.deleteQueue(deleteManLocQ);
         } catch (SqsException ex) {
-            System.out.println("SQSUtils.deleteQ(): error... " + ex.getMessage());
+            log.error("SQSUtils.deleteQ(): error... " + ex.getMessage());
         }
     }
 
@@ -86,9 +89,9 @@ public class SQSUtils {
         try {
             CreateQueueResponse create_result = sqs.createQueue(request);
         } catch (QueueNameExistsException qExistsEx) {
-            System.out.println("SQSUtils.createQByName(): queue with name: " + queueName + " already exists");
+            log.error("SQSUtils.createQByName(): queue with name: " + queueName + " already exists");
         } catch (QueueDeletedRecentlyException ex) {
-            System.out.println("SQSUtils.createQByName(): failed... " + ex.getMessage() + "\nsleeping 1 min and retrying");
+            log.error("SQSUtils.createQByName(): failed... " + ex.getMessage() + "\nsleeping 1 min and retrying");
             try {
                 Thread.sleep(60000);
                 sqs.createQueue(request);

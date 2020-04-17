@@ -1,3 +1,5 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SqsException;
@@ -12,7 +14,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Manager {
+    private final static Logger log = LoggerFactory.getLogger(Manager.class);
+
     public static void main(String[] args) throws InterruptedException {
+        log.info("Manager is up...");
         final String sqsName = "Local_Manager_Queue";           // Save the name of the Local <--> Manager sqs
         final String tasksQName = "TasksQueue";
 
@@ -26,7 +31,7 @@ public class Manager {
         Map<QueueAttributeName, String> attributes = new HashMap<>();
         attributes.put(QueueAttributeName.VISIBILITY_TIMEOUT, "60");
         SQSUtils.buildQueueIfNotExists(tasksQName, attributes);
-        System.out.println("Manager build TasksQ - succeed");
+        log.debug("Manager build TasksQ - succeed");
 
         while (true) {
             try {
@@ -34,31 +39,29 @@ public class Manager {
                 if (inputMessage != null) {
                     // Terminate stay as is, only one send terminate and we done with this.
                     if (inputMessage.body().equals("terminate")) {
-                        System.out.println("manager get terminate message, deleting terminate message");
+                        log.info("manager get terminate message, deleting terminate message");
                         SQSUtils.deleteMSG(inputMessage, sqsName);
-                        System.out.println("waiting for all local apps connections to finish");
+                        log.info("waiting for all local apps connections to finish");
                         executor.shutdown();
                         waitExecutorToFinish(executor);
-                        System.out.println("terminating ec2 instances. ");
+                        log.info("terminating ec2 instances. ");
                         EC2Utils.terminateEc2Instances();
-                        System.out.println("succeed terminate all ec2 instances, start deleting TasksQueue process");
+                        log.info("succeed terminate all ec2 instances, start deleting TasksQueue process");
                         SQSUtils.deleteQ("TasksQueue");
-                        System.out.println("Deleting Local < -- > Manager Queue..");
+                        log.info("Deleting Local < -- > Manager Queue..");
                         SQSUtils.deleteQ("Local_Manager_Queue");
                         break;
                     } else if (isS3Message(inputMessage.body())) {
                         int numOfMsgForWorker = extractN(inputMessage);
-                        System.out.println("Manager executing runner with ResultQ: TasksResultsQ" + extractId(inputMessage.body())
+                        log.info("Manager executing runner with ResultQ: TasksResultsQ" + extractId(inputMessage.body())
                                 + " msgPerWorker: " + numOfMsgForWorker);
                         pool.execute(new ManagerRunner("TasksQueue",
                                 "TasksResultsQ", numOfMsgForWorker, inputMessage.body(), extractId(inputMessage.body())));
-                        System.out.println("Pool active thread count: " + pool.getActiveCount());
                         SQSUtils.deleteMSG(inputMessage, sqsName);
                     }
                 }
             } catch (SqsException sqsExecption) {
-                System.out.println("Manager.main(): got SqsException... " + sqsExecption.getMessage() +
-                        "\nretrying!");
+                log.error("Manager.main(): got SqsException... {} sleeping & retrying!", sqsExecption.getMessage());
                 Thread.sleep(1000);
             }
         }
@@ -79,7 +82,7 @@ public class Manager {
             executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 
         } catch (InterruptedException exception) {
-            System.out.println(exception.getMessage());
+            log.error(exception.getMessage());
         }
     }
 

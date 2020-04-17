@@ -1,3 +1,5 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.ec2.model.Ec2Exception;
 import software.amazon.awssdk.services.sqs.model.Message;
@@ -10,6 +12,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ManagerRunner implements Runnable {
+    private final static Logger log = LoggerFactory.getLogger(Manager.class);
+
     private final String tasksQName;
     private final int numOfMsgForWorker;
     private final String inputMessage;
@@ -35,22 +39,22 @@ public class ManagerRunner implements Runnable {
         List<String> tasks = createWorkerTasks("inputFile" + id + ".txt");
         // Build Workers output Q
         SQSUtils.buildQueueIfNotExists(workerOutputQName);
-        System.out.println("build Workers outputQ succeed");
+        log.debug("build Workers outputQ succeed");
         int messageCount = tasks.size();
-        System.out.println("numOfMessages: " + messageCount);
+        log.debug("numOfMessages: " + messageCount);
         // Delegate Tasks to workers.
         for (String task : tasks) {
-            System.out.println("task: " + task);
+            log.debug("task: " + task);
             SQSUtils.sendMSG(tasksQName, task + " " + id);
         }
-        System.out.println("Delegated all tasks to workers, now waiting for them to finish..");
-        System.out.println("Lunching Workers..");
+        log.debug("Delegated all tasks to workers, now waiting for them to finish..");
+        log.info("Lunching Workers..");
         launchWorkers(messageCount, numOfMsgForWorker, this.tasksQName, "TasksResultsQ");
-        System.out.println("Finished lunching workers process.");
-        System.out.println("Start making summary file.. ");
+        log.info("Finished lunching workers process.");
+        log.info("Start making summary file.. ");
         makeAndUploadSummaryFile(messageCount);
-        System.out.println("finish make and upload summary file");
-        System.out.println("ManagerRunner with id: " + id + " exited!");
+        log.info("finish make and upload summary file");
+        log.info("ManagerRunner with id: " + id + " exited!");
     }
 
 
@@ -58,7 +62,7 @@ public class ManagerRunner implements Runnable {
     public synchronized static void launchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
         try {
             if (messageCount == 0) {
-                System.out.println("got 0 message count! should never happen!");
+                log.error("got 0 message count! should never happen!");
                 return;
             }
             int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
@@ -67,18 +71,20 @@ public class ManagerRunner implements Runnable {
             if (numOfRunningWorkers > 0) {
                 numOfNewWorkers = (numOfNewWorkers <= numOfRunningWorkers) ? 0 :
                         numOfNewWorkers - numOfRunningWorkers;
-                System.out.println("Number of running workers: " + numOfRunningWorkers + " requested workers: " +
+                log.info("Number of running workers: " + numOfRunningWorkers + " requested workers: " +
                         numOfNewWorkers + ". No new workers will be launched!");
             }
             if (numOfNewWorkers == 0) return;
             //assert there are no more than 10 workers running.
             if (numOfNewWorkers + numOfRunningWorkers <= 9) {
+                log.info("ManagerRunner launching " + numOfNewWorkers + " workers");
                 bootstrapWorkers(numOfNewWorkers, tasksQName, workerOutputQName);
             } else if (numOfRunningWorkers < 9) {
+                log.info("ManagerRunner launching only " + (9 - numOfRunningWorkers) + " workers. max of 9 workers reached!");
                 bootstrapWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
             }
         } catch (Ec2Exception ec2Ex) {
-            System.out.println("ManagerRunner.launchWorkers(): got Ec2Exception... " + ec2Ex.getMessage());
+            log.error("ManagerRunner.launchWorkers(): got Ec2Exception... " + ec2Ex.getMessage());
         }
     }
 
@@ -98,12 +104,12 @@ public class ManagerRunner implements Runnable {
 
     private static String createWorkerUserData(String tasksQName, String workerOutputQName) {
         String bucketName = S3Utils.PRIVATE_BUCKET;
-        String fileKey = "workerapp";
+        String fileKey = "jars/workerapp";
         String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
                 + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
                 "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
-        System.out.println("user data: " + script);
+        log.debug("user data: " + script);
         return script;
     }
 
@@ -119,7 +125,7 @@ public class ManagerRunner implements Runnable {
         FileWriter summaryFile;
         try {
             summaryFile = new FileWriter("summaryFile" + id + ".txt");
-            System.out.println("ManagerRunner with id: " + id + " expecting to read: " + numOfMessages + " msgs"
+            log.info("ManagerRunner with id: " + id + " expecting to read: " + numOfMessages + " msgs"
                     + " from Q: " + workerOutputQName);
             while (leftToRead > 0) {
                 try {
@@ -130,34 +136,30 @@ public class ManagerRunner implements Runnable {
                         leftToRead--;
                     }
                 } catch (SqsException | SdkClientException sqsEx) {
-                    System.out.println("ManagerRunner.makeAndUploadSummaryFile(): got SqsException "
+                    log.error("ManagerRunner.makeAndUploadSummaryFile(): got SqsException "
                             + sqsEx.getMessage() + "\nsleeping & retrying");
                     Thread.sleep(1000);
                 }
             }
             summaryFile.close();
-            System.out.println("RunInstancesResponse response finish making summaryFile.. start uploading summary file..");
+            log.debug("RunInstancesResponse response finish making summaryFile.. start uploading summary file..");
+            String summaryFileKey = this.id + "/" + "summaryFile";
             S3Utils.uploadFile("summaryFile" + id + ".txt",
-                    "summaryFile", S3Utils.PRIVATE_BUCKET, false);
+                    summaryFileKey, S3Utils.PRIVATE_BUCKET);
 
-            System.out.println("finish uploading file..put message in sqs ");
-            SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl("summaryFile"));
-
+            log.debug("finish uploading file..put message in sqs ");
+            SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl(summaryFileKey));
 
         } catch (Exception ex) {
-            System.out.println("ManagerRunner failed to create final summary file. stop running!");
-            System.out.println(ex.toString());
+            log.error("ManagerRunner failed to create final summary file. stop running! {}", ex.getMessage());
         }
-            //delete file
-            File file = new File("summaryFile" + id + ".txt");
-            if(file.delete())
-            {
-                System.out.println("File deleted successfully");
-            }
-            else
-            {
-                System.out.println("Failed to delete the file");
-            }
+        //delete file
+        File file = new File("summaryFile" + id + ".txt");
+        if (file.delete()) {
+            System.out.println("File deleted successfully");
+        } else {
+            System.out.println("Failed to delete the file");
+        }
 
     }
 
