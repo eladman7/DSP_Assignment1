@@ -18,7 +18,7 @@ public class S3Utils {
     private final static Logger log = LoggerFactory.getLogger(S3Utils.class);
 
     private static final S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
-    public static final String PRIVATE_BUCKET = "bucket_baros";
+    public static final String PRIVATE_BUCKET = "baros";
 
     public static String uploadFile(String fileLocalPath, String fileKey) {
         uploadFile(fileLocalPath, fileKey, PRIVATE_BUCKET);
