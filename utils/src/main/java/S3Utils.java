@@ -27,7 +27,7 @@ public class S3Utils {
 
     public static boolean uploadFile(String fileLocalPath, String fileKey, String bucketName) {
         File input_file = new File(fileLocalPath);
-        uploadInputFile(input_file, bucketName, fileKey);
+        uploadFile(input_file, bucketName, fileKey);
         return true;
     }
 
@@ -45,7 +45,7 @@ public class S3Utils {
     /**
      * Upload first Input file to S3
      */
-    private static void uploadInputFile(File input_file, String bucket, String key) {
+    public static void uploadFile(File input_file, String bucket, String key) {
         try {
             createBucket(bucket);
         } catch (BucketAlreadyExistsException | BucketAlreadyOwnedByYouException ignored) {
@@ -53,7 +53,6 @@ public class S3Utils {
         }
         s3.putObject(PutObjectRequest.builder()
                         .bucket(bucket)
-                        .acl(ObjectCannedACL.PUBLIC_READ_WRITE)
                         .key(key)
                         .build(),
                 RequestBody.fromFile(input_file));
@@ -62,12 +61,25 @@ public class S3Utils {
     private static void createBucket(String bucketName) {
         s3.createBucket(CreateBucketRequest
                 .builder()
-                .acl(BucketCannedACL.PUBLIC_READ_WRITE)
                 .bucket(bucketName)
                 .createBucketConfiguration(
                         CreateBucketConfiguration.builder()
                                 .build())
                 .build());
+        PutPublicAccessBlockRequest pubBlockReq = PutPublicAccessBlockRequest.builder()
+                .bucket(bucketName)
+                .publicAccessBlockConfiguration(PublicAccessBlockConfiguration.builder()
+                        .blockPublicAcls(true)
+                        .blockPublicPolicy(true)
+                        .ignorePublicAcls(true)
+                        .restrictPublicBuckets(true)
+                        .build())
+                .build();
+        try {
+            s3.putPublicAccessBlock(pubBlockReq);
+        } catch (S3Exception | SdkClientException ex) {
+            log.warn("could not make bucket not public");
+        }
     }
 
     private static void multipartUpload(String filePath, String keyName, String bucketName) {
@@ -130,5 +142,15 @@ public class S3Utils {
             // couldn't parse the response from Amazon S3.
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Extract the file url from some s3 path
+     *
+     * @param key of the bucket
+     * @return file url
+     */
+    public static String getFileUrl(String key) {
+        return "s3://" + S3Utils.PRIVATE_BUCKET + "/" + key;
     }
 }

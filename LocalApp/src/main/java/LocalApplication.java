@@ -5,10 +5,9 @@ import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SqsException;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,6 +41,7 @@ public class LocalApplication {
         // ---- Create Manager Instance
         if (!EC2Utils.isInstanceRunning("Manager")) {
             log.debug("There is no running manager.. launch manager");
+            uploadJars();
             String managerScript = createManagerUserData();
             EC2Utils.createEc2Instance("Manager", managerScript, 1);
             log.info("Manager launched successfully");
@@ -83,6 +83,25 @@ public class LocalApplication {
             log.debug("Local sent terminate message and finish..deleting local Q's.. Bye");
         }
         log.info("Done");
+    }
+
+    private static void uploadJars() throws IOException {
+        log.info("Uploading manager jar..");
+        File tempFile = File.createTempFile("manager_temp", "jar");
+        tempFile.deleteOnExit();
+        try (InputStream in = LocalApplication.class.getClassLoader().getResourceAsStream("Manager.jar")) {
+            Files.copy(in, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        S3Utils.uploadFile(tempFile, S3Utils.PRIVATE_BUCKET, "jars/managerapp");
+
+        log.info("Uploading worker jar..");
+        File tempFile2 = File.createTempFile("worker_temp", "jar");
+        tempFile2.deleteOnExit();
+        try (InputStream in2 = LocalApplication.class.getClassLoader().getResourceAsStream("Worker.jar")) {
+            Files.copy(in2, tempFile2.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        S3Utils.uploadFile(tempFile2, S3Utils.PRIVATE_BUCKET, "jars/workerapp");
+        log.info("Finish upload jars.");
     }
 
 
@@ -127,20 +146,9 @@ public class LocalApplication {
     }
 
     private static String createManagerUserData() {
-        String fileKey = "jars/managerapp";
-        log.info("Uploading manager jar..");
-        S3Utils.uploadFile("out/artifacts/Manager_jar/Manager.jar",
-                fileKey, S3Utils.PRIVATE_BUCKET);
-
-        log.info("Uploading worker jar..");
-        S3Utils.uploadFile("out/artifacts/Worker_jar/Worker.jar",
-                "jars/workerapp", S3Utils.PRIVATE_BUCKET);
-        log.info("Finish upload jars.");
-
-        String s3Path = "https://" + S3Utils.PRIVATE_BUCKET + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
-                + "wget " + s3Path + " -O /home/ec2-user/Manager.jar\n" +
-                "java -jar /home/ec2-user/Manager.jar " + "\n";
+                + "aws s3 cp " + S3Utils.getFileUrl("jars/managerapp") + " /home/ec2-user/Manager.jar\n"
+                + "java -jar /home/ec2-user/Manager.jar " + "\n";
         log.debug("user data: " + script);
         return script;
     }

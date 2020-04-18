@@ -103,12 +103,10 @@ public class ManagerRunner implements Runnable {
     }
 
     private static String createWorkerUserData(String tasksQName, String workerOutputQName) {
-        String bucketName = S3Utils.PRIVATE_BUCKET;
         String fileKey = "jars/workerapp";
-        String s3Path = "https://" + bucketName + ".s3.amazonaws.com/" + fileKey;
         String script = "#!/bin/bash\n"
-                + "wget " + s3Path + " -O /home/ec2-user/worker.jar\n" +
-                "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
+                + "aws s3 cp " + S3Utils.getFileUrl(fileKey) + " /home/ec2-user/worker.jar\n"
+                + "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
         log.debug("user data: " + script);
         return script;
     }

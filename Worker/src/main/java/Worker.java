@@ -15,7 +15,6 @@ public class Worker {
         String outputQName;
         while (true) {
             try {
-
                 Message message = SQSUtils.recieveMSG(inputQName);
                 if (message != null) {
                     if (message.body().toLowerCase().equals("terminate")) {
