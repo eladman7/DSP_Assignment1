@@ -39,13 +39,8 @@ public class LocalApplication {
         log.info("New task message successfully sent");
 
         // ---- Create Manager Instance
-        if (!EC2Utils.isInstanceRunning("Manager")) {
-            log.debug("There is no running manager.. launch manager");
-//            uploadJars();
-            String managerScript = createManagerUserData();
-            EC2Utils.createEc2Instance("Manager", managerScript, 1);
-            log.info("Manager launched successfully");
-        } else log.debug("Ec2 manager already running.. ");
+//        uploadJars();
+        setupManager();
 
         // ---- Read SQS summary message from manager
         log.debug("building manager < -- > local queue");
@@ -83,6 +78,15 @@ public class LocalApplication {
             log.debug("Local sent terminate message and finish..deleting local Q's.. Bye");
         }
         log.info("Done");
+    }
+
+    private static void setupManager() {
+        if (!EC2Utils.isInstanceRunning("Manager")) {
+            log.debug("There is no running manager.. launch manager");
+            String managerScript = createManagerUserData();
+            EC2Utils.createEc2Instance("Manager", managerScript, 1);
+            log.info("Manager launched successfully");
+        } else log.debug("Ec2 manager already running.. ");
     }
 
     private static void uploadJars() throws IOException {

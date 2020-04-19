@@ -118,11 +118,12 @@ public class ManagerRunner implements Runnable {
      *
      * @param numOfMessages number of messages we got
      */
-    private void makeAndUploadSummaryFile(int numOfMessages) {
+    private synchronized void makeAndUploadSummaryFile(int numOfMessages) {
         int leftToRead = numOfMessages;
         FileWriter summaryFile;
+        String fileLocalPath = "summaryFile" + id + ".txt";
         try {
-            summaryFile = new FileWriter("summaryFile" + id + ".txt");
+            summaryFile = new FileWriter(fileLocalPath);
             log.info("ManagerRunner with id: " + id + " expecting to read: " + numOfMessages + " msgs"
                     + " from Q: " + workerOutputQName);
             while (leftToRead > 0) {
@@ -142,7 +143,7 @@ public class ManagerRunner implements Runnable {
             summaryFile.close();
             log.debug("RunInstancesResponse response finish making summaryFile.. start uploading summary file..");
             String summaryFileKey = this.id + "/" + "summaryFile";
-            S3Utils.uploadFile("summaryFile" + id + ".txt",
+            S3Utils.uploadFile(fileLocalPath,
                     summaryFileKey, S3Utils.PRIVATE_BUCKET);
 
             log.debug("finish uploading file..put message in sqs ");
@@ -152,11 +153,11 @@ public class ManagerRunner implements Runnable {
             log.error("ManagerRunner failed to create final summary file. stop running! {}", ex.getMessage());
         }
         //delete file
-        File file = new File("summaryFile" + id + ".txt");
+        File file = new File(fileLocalPath);
         if (file.delete()) {
-            System.out.println("File deleted successfully");
+            log.debug("File deleted successfully");
         } else {
-            System.out.println("Failed to delete the file");
+            log.debug("Failed to delete the file");
         }
 
     }
