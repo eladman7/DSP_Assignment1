@@ -41,7 +41,7 @@ public class LocalApplication {
         // ---- Create Manager Instance
         if (!EC2Utils.isInstanceRunning("Manager")) {
             log.debug("There is no running manager.. launch manager");
-            uploadJars();
+//            uploadJars();
             String managerScript = createManagerUserData();
             EC2Utils.createEc2Instance("Manager", managerScript, 1);
             log.info("Manager launched successfully");
