@@ -36,7 +36,6 @@ public class S3Utils {
         return true;
     }
 
-    //todo: elad maybe add retry
     public static void getObjectToLocal(String fileKey, String bucket, String localFilePath) {
         s3.getObject(GetObjectRequest.builder().bucket(bucket).key(fileKey).build(),
                 ResponseTransformer.toFile(Paths.get(localFilePath)));

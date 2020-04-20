@@ -5,9 +5,10 @@ import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 import software.amazon.awssdk.services.sqs.model.SqsException;
 
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,7 +19,6 @@ public class LocalApplication {
     private final static Logger log = LoggerFactory.getLogger(LocalApplication.class);
 
     public static void main(String[] args) throws InterruptedException, IOException {
-//        uploadJars();
         final String localAppId = String.valueOf(System.currentTimeMillis());
         String input_file_path = args[0]; // input file path
         String output_file_name = args[1]; // output file path
@@ -88,25 +88,6 @@ public class LocalApplication {
             EC2Utils.createEc2Instance("Manager", managerScript, 1);
             log.info("Manager launched successfully");
         } else log.info("Ec2 manager already running.. ");
-    }
-
-    private static void uploadJars() throws IOException {
-        log.info("Uploading manager jar..");
-        File tempFile = File.createTempFile("manager_temp", "jar");
-        tempFile.deleteOnExit();
-        try (InputStream in = LocalApplication.class.getClassLoader().getResourceAsStream("Manager.jar")) {
-            Files.copy(in, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
-        S3Utils.uploadFile(tempFile, S3Utils.PRIVATE_BUCKET, "jars/managerapp");
-
-        log.info("Uploading worker jar..");
-        File tempFile2 = File.createTempFile("worker_temp", "jar");
-        tempFile2.deleteOnExit();
-        try (InputStream in2 = LocalApplication.class.getClassLoader().getResourceAsStream("Worker.jar")) {
-            Files.copy(in2, tempFile2.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        }
-        S3Utils.uploadFile(tempFile2, S3Utils.PRIVATE_BUCKET, "jars/workerapp");
-        log.info("Finish upload jars.");
     }
 
 
