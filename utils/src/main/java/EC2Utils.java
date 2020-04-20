@@ -179,4 +179,58 @@ public class EC2Utils {
         return counter;
     }
 
+
+    //Local App should wait for other before lunching Workers.
+    public synchronized static void launchWorkers(int messageCount, int numOfMsgForWorker, String tasksQName, String workerOutputQName) {
+        try {
+            if (messageCount == 0) {
+                log.error("got 0 message count! should never happen!");
+                return;
+            }
+            int numOfRunningWorkers = EC2Utils.numOfRunningWorkers();
+            // numOfNewWorkers = // Number of new workers the job require.
+            int numOfNewWorkers = (messageCount <= numOfMsgForWorker) ? 1 : messageCount / numOfMsgForWorker;
+            if (numOfRunningWorkers > 0) {
+                numOfNewWorkers = (numOfNewWorkers <= numOfRunningWorkers) ? 0 :
+                        numOfNewWorkers - numOfRunningWorkers;
+                log.info("Number of running workers: " + numOfRunningWorkers + " requested workers: " +
+                        numOfNewWorkers + ". No new workers will be launched!");
+            }
+            if (numOfNewWorkers == 0) return;
+            //assert there are no more than 10 workers running.
+            if (numOfNewWorkers + numOfRunningWorkers <= 9) {
+                log.info("ManagerRunner launching " + numOfNewWorkers + " workers");
+                bootstrapWorkers(numOfNewWorkers, tasksQName, workerOutputQName);
+            } else if (numOfRunningWorkers < 9) {
+                log.info("ManagerRunner launching only " + (9 - numOfRunningWorkers) + " workers. max of 9 workers reached!");
+                bootstrapWorkers(9 - numOfRunningWorkers, tasksQName, workerOutputQName);
+            }
+        } catch (Ec2Exception ec2Ex) {
+            log.error("ManagerRunner.launchWorkers(): got Ec2Exception... " + ec2Ex.getMessage());
+        }
+    }
+
+
+    /**
+     * This function create numOfWorker Ec2-workers.
+     *
+     * @param numOfInstances how much workers to create
+     */
+    public static void bootstrapWorkers(int numOfInstances, String tasksQName, String workerOutputQName) {
+        String[] instancesNames = new String[numOfInstances];
+        for (int i = 0; i < numOfInstances; i++) {
+            instancesNames[i] = "WorkerNumber" + i;
+        }
+        EC2Utils.createEc2Instance(instancesNames, createWorkerUserData(tasksQName, workerOutputQName), numOfInstances);
+    }
+
+    private static String createWorkerUserData(String tasksQName, String workerOutputQName) {
+        String fileKey = "jars/workerapp";
+        String script = "#!/bin/bash\n"
+                + "aws s3 cp " + S3Utils.getFileUrl(fileKey) + " /home/ec2-user/worker.jar\n"
+                + "java -jar /home/ec2-user/worker.jar " + tasksQName + " " + workerOutputQName + "\n";
+        log.debug("user data: " + script);
+        return script;
+    }
+
 }

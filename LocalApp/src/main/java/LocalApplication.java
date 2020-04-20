@@ -18,6 +18,7 @@ public class LocalApplication {
     private final static Logger log = LoggerFactory.getLogger(LocalApplication.class);
 
     public static void main(String[] args) throws InterruptedException, IOException {
+//        uploadJars();
         final String localAppId = String.valueOf(System.currentTimeMillis());
         String input_file_path = args[0]; // input file path
         String output_file_name = args[1]; // output file path
@@ -82,11 +83,11 @@ public class LocalApplication {
 
     private static void setupManager() {
         if (!EC2Utils.isInstanceRunning("Manager")) {
-            log.debug("There is no running manager.. launch manager");
+            log.info("There is no running manager.. launch manager");
             String managerScript = createManagerUserData();
             EC2Utils.createEc2Instance("Manager", managerScript, 1);
             log.info("Manager launched successfully");
-        } else log.debug("Ec2 manager already running.. ");
+        } else log.info("Ec2 manager already running.. ");
     }
 
     private static void uploadJars() throws IOException {
@@ -109,7 +110,7 @@ public class LocalApplication {
     }
 
 
-    private static void makeOutputFile(String fileName, String outputFileName) throws IOException {
+    private synchronized static void makeOutputFile(String fileName, String outputFileName) throws IOException {
         log.debug("Start making output file.");
         BufferedReader reader;
         String line;
