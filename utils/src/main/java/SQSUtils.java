@@ -46,15 +46,12 @@ public class SQSUtils {
      * @return Build sqs with the name qName, if not already exists.
      */
     public static String buildQueueIfNotExists(String qName, Map<QueueAttributeName, String> atrributes) {
-        String tasksQUrl;
         try {
-            tasksQUrl = getQUrl(qName);
+            return getQUrl(qName);
             // Throw exception in the first try
         } catch (QueueDoesNotExistException ex) {
-            createQByName(qName, atrributes);
-            tasksQUrl = getQUrl(qName);
+            return createQByName(qName, atrributes);
         }
-        return tasksQUrl;
     }
 
     public static void deleteQ(String qName) {
@@ -74,7 +71,7 @@ public class SQSUtils {
                 .build();
     }
 
-    private static void createQByName(String queueName, Map<QueueAttributeName, String> attrMap) {
+    private static String createQByName(String queueName, Map<QueueAttributeName, String> attrMap) {
         CreateQueueRequest request;
         if (!CollectionUtils.isNullOrEmpty(attrMap)) {
             request = CreateQueueRequest.builder()
@@ -88,17 +85,19 @@ public class SQSUtils {
         }
         try {
             CreateQueueResponse create_result = sqs.createQueue(request);
+            return create_result.queueUrl();
         } catch (QueueNameExistsException qExistsEx) {
             log.error("SQSUtils.createQByName(): queue with name: " + queueName + " already exists");
         } catch (QueueDeletedRecentlyException ex) {
             log.error("SQSUtils.createQByName(): failed... " + ex.getMessage() + "\nsleeping 1 min and retrying");
             try {
                 Thread.sleep(60000);
-                sqs.createQueue(request);
+                return sqs.createQueue(request).queueUrl();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
+        return null;
     }
 
     /**

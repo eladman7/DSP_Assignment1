@@ -110,7 +110,7 @@ public class LocalApplication {
     }
 
 
-    private synchronized static void makeOutputFile(String fileName, String outputFileName) throws IOException {
+    private static void makeOutputFile(String fileName, String outputFileName) throws IOException {
         log.debug("Start making output file.");
         BufferedReader reader;
         String line;
