@@ -10,49 +10,48 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class LocalApplication {
     private final static Logger log = LoggerFactory.getLogger(LocalApplication.class);
+    private final static String LocalManagerQName = "Local_Manager_Queue";
+    private final static String LocalAppId = String.valueOf(System.currentTimeMillis());
 
     public static void main(String[] args) throws InterruptedException, IOException {
-        final String localAppId = String.valueOf(System.currentTimeMillis());
+
         String input_file_path = args[0]; // input file path
         String output_file_name = args[1]; // output file path
         int numOfPdfPerWorker = Integer.parseInt(args[2]); // n - work per worker
         boolean terminate = args.length == 4 && Boolean.parseBoolean(args[3]); // terminate?
-        String inputFileKey = localAppId + "/" + "inputFile" + localAppId;
 
         // ---- Upload input file to s3 ----
-        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET);      // Upload input File to S3
-        String fileUrl = getFileUrl(inputFileKey);
+        String inputFileKey = LocalAppId + "/" + "inputFile" + LocalAppId;
+        S3Utils.uploadFile(input_file_path, inputFileKey, S3Utils.PRIVATE_BUCKET);
+        String fileUrl = S3Utils.getFileUrl(inputFileKey);
         log.info("Input file successfully uploaded here: {}", fileUrl);
 
         // ---- Upload first message to sqs
-        String LocalManagerQName = "Local_Manager_Queue";
-        Map<QueueAttributeName, String> attributes = new HashMap<>();
-        attributes.put(QueueAttributeName.VISIBILITY_TIMEOUT, "120");
-        SQSUtils.buildQueueIfNotExists(LocalManagerQName, attributes);
-        SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " + numOfPdfPerWorker);
-        log.info("New task message successfully sent");
+        sendNewTask(numOfPdfPerWorker, fileUrl);
 
         // ---- Create Manager Instance
-//        uploadJars();
         setupManager();
 
         // ---- Read SQS summary message from manager
+        handleSummaryMsg(output_file_name, terminate);
+        log.info("Done");
+    }
+
+    private static void handleSummaryMsg(String output_file_name, boolean terminate) throws InterruptedException, IOException {
         log.debug("building manager < -- > local queue");
-        String ManagerLocalQName = "Manager_Local_Queue" + localAppId;
-        SQSUtils.buildQueueIfNotExists(ManagerLocalQName);
+        String managerLocalQName = "Manager_Local_Queue" + LocalAppId;
+        SQSUtils.buildQueueIfNotExists(managerLocalQName);
         log.info("Waiting for a summary...");
         String summaryMessage;
         Message sMessage;
         while (true) {
             try {
-                sMessage = SQSUtils.recieveMSG(ManagerLocalQName);
+                sMessage = SQSUtils.recieveMSG(managerLocalQName);
                 if (sMessage != null) {
                     summaryMessage = sMessage.body();
                     if (summaryMessage != null)
@@ -64,21 +63,24 @@ public class LocalApplication {
                 Thread.sleep(1000);
             }
         }
-        SQSUtils.deleteMSG(sMessage, ManagerLocalQName);
+        SQSUtils.deleteMSG(sMessage, managerLocalQName);
         log.info("Got summary file. Creating output file");
-        //Download summary file and create Html output
         String summaryBucket = extractBucket(summaryMessage);
         String summaryKey = extractKey(summaryMessage);
-        S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + localAppId + ".txt");
-        makeOutputFile("summaryFile" + localAppId + ".txt", output_file_name);
-        //We want to delete this special local app Q any way when finish.
-        log.debug("deleting LA Q's");
-        deleteLocalAppQueues(localAppId);
+        S3Utils.getObjectToLocal(summaryKey, summaryBucket, "summaryFile" + LocalAppId + ".txt");
+        makeOutputFile("summaryFile" + LocalAppId + ".txt", output_file_name);
+        log.debug("deleting Local app Q's");
+        deleteLocalAppQueues();
         if (terminate) {
             SQSUtils.sendMSG(LocalManagerQName, "terminate");
             log.debug("Local sent terminate message and finish..deleting local Q's.. Bye");
         }
-        log.info("Done");
+    }
+
+    private static void sendNewTask(int numOfPdfPerWorker, String fileUrl) {
+        SQSUtils.buildQueueIfNotExists(LocalManagerQName);
+        SQSUtils.sendMSG(LocalManagerQName, fileUrl + " " + numOfPdfPerWorker);
+        log.info("New task message successfully sent");
     }
 
     private static void setupManager() {
@@ -120,7 +122,6 @@ public class LocalApplication {
         summaryFile.close();
         reader.close();
         log.debug("Finish making summary file.");
-
     }
 
     public static boolean conversionSucceeded(String link, String bucketName) {
@@ -139,9 +140,9 @@ public class LocalApplication {
         return script;
     }
 
-    private static void deleteLocalAppQueues(String localAppId) {
-        SQSUtils.deleteQ("Manager_Local_Queue" + localAppId);
-        SQSUtils.deleteQ("TasksResultsQ" + localAppId);
+    private static void deleteLocalAppQueues() {
+        SQSUtils.deleteQ("Manager_Local_Queue" + LocalAppId);
+        SQSUtils.deleteQ("TasksResultsQ" + LocalAppId);
     }
 
     /**
@@ -169,16 +170,6 @@ public class LocalApplication {
             return matcher.group(2);
         }
         return " ";
-    }
-
-    /**
-     * Extract the file url from some s3 path
-     *
-     * @param key of the bucket
-     * @return file url
-     */
-    private static String getFileUrl(String key) {
-        return "s3://" + S3Utils.PRIVATE_BUCKET + "/" + key;
     }
 
 }

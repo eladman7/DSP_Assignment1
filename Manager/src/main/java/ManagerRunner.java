@@ -93,7 +93,7 @@ public class ManagerRunner implements Runnable {
                     summaryFileKey, S3Utils.PRIVATE_BUCKET);
 
             log.debug("finish uploading file..put message in sqs ");
-            SQSUtils.sendMSG("Manager_Local_Queue" + id, getFileUrl(summaryFileKey));
+            SQSUtils.sendMSG("Manager_Local_Queue" + id, S3Utils.getFileUrl(summaryFileKey));
 
         } catch (Exception ex) {
             log.error("ManagerRunner failed to create final summary file. stop running! {}", ex.getMessage());
@@ -155,10 +155,6 @@ public class ManagerRunner implements Runnable {
             ex.printStackTrace();
         }
         return tasks;
-    }
-
-    private String getFileUrl(String key) {
-        return "s3://" + S3Utils.PRIVATE_BUCKET + "/" + key;
     }
 
     @Override
